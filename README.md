@@ -1,6 +1,8 @@
 # go-cloudant
 A Cloudant library for golang.
 
+[![Build Status](https://travis-ci.org/smithsz/go-cloudant.svg?branch=master)](https://travis-ci.org/smithsz/go-cloudant)
+
 ## Description
 A [Cloudant](https://cloudant.com/) library for golang.
 
