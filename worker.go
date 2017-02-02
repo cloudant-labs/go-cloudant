@@ -1,6 +1,6 @@
 package cloudant
 
-var workerFunc func(worker *worker, job *Job)
+var workerFunc func(worker *worker, job *Job) // func executed by workers
 
 type worker struct {
 	id       int

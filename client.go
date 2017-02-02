@@ -27,14 +27,15 @@ var ExpectContinueTimeout time.Duration = 1 * time.Second
 type CouchClient struct {
 	username   string
 	password   string
-	apiURL     *url.URL
+	rootURL    *url.URL
 	httpClient *http.Client
 	jobQueue   chan *Job
 	workers    []*worker
 	workerChan chan chan *Job
 }
 
-func CreateClient(username, password, rootURL string, concurrency int) (*CouchClient, error) {
+// CreateClient returns a new client.
+func CreateClient(username, password, rootStrURL string, concurrency int) (*CouchClient, error) {
 	cookieJar, _ := cookiejar.New(nil)
 
 	c := &http.Client{
@@ -50,7 +51,7 @@ func CreateClient(username, password, rootURL string, concurrency int) (*CouchCl
 		},
 	}
 
-	apiURL, err := url.ParseRequestURI(rootURL)
+	apiURL, err := url.ParseRequestURI(rootStrURL)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +59,7 @@ func CreateClient(username, password, rootURL string, concurrency int) (*CouchCl
 	couchClient := CouchClient{
 		username:   username,
 		password:   password,
-		apiURL:     apiURL,
+		rootURL:    apiURL,
 		httpClient: c,
 		jobQueue:   make(chan *Job, 100),
 	}
@@ -70,8 +71,50 @@ func CreateClient(username, password, rootURL string, concurrency int) (*CouchCl
 	return &couchClient, nil
 }
 
-func (c *CouchClient) GetOrCreateDatabase(databaseName string) (*Database, error) {
-	databaseURL, err := url.Parse(c.apiURL.String())
+// Delete deletes a specified database.
+func (c *CouchClient) Delete(databaseName string) error {
+	databaseURL, err := url.Parse(c.rootURL.String())
+	if err != nil {
+		return err
+	}
+
+	job, err := c.request("DELETE", databaseURL.String(), nil)
+	defer job.Close()
+
+	if err != nil {
+		return fmt.Errorf("failed to delete database %s, %s", databaseName, err)
+	}
+
+	if job.response.StatusCode != 200 {
+		return fmt.Errorf(
+			"failed to delete database %s, status %s", databaseName, job.response.StatusCode)
+	}
+
+	return nil
+}
+
+// Exists checks the existence of a specified database.
+// Returns true if the database exists, else false.
+func (c *CouchClient) Exists(databaseName string) (bool, error) {
+	databaseURL, err := url.Parse(c.rootURL.String())
+	if err != nil {
+		return false, err
+	}
+
+	job, err := c.request("HEAD", databaseURL.String(), nil)
+	defer job.Close()
+
+	if err != nil {
+		return false, fmt.Errorf("failed to query server: %s", err)
+	}
+
+	return job.response.StatusCode == 200, nil
+}
+
+// GetOrCreate returns a database.
+// If the database doesn't exist on the server then it will be created.
+func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
+	databaseURL, err := url.Parse(c.rootURL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -82,28 +125,29 @@ func (c *CouchClient) GetOrCreateDatabase(databaseName string) (*Database, error
 	defer job.Close()
 
 	if err != nil {
-		return nil, fmt.Errorf("unable to create database: %s", err)
+		return nil, fmt.Errorf("failed to create database: %s", err)
 	}
 
 	if job.error != nil {
-		return nil, fmt.Errorf("unable to create database: %s", job.error)
+		return nil, fmt.Errorf("failed to create database: %s", job.error)
 	}
 
-	if job.response.StatusCode == 201 || job.response.StatusCode == 412 {
-		database := &Database{
-			client:       c,
-			DatabaseName: databaseName,
-			databaseURL:  databaseURL,
-		}
-
-		return database, nil
-	} else {
-		return nil, errors.New("unable to create database")
+	if job.response.StatusCode != 201 && job.response.StatusCode != 412 {
+		return nil, errors.New("failed to create database")
 	}
+
+	database := &Database{
+		client:       c,
+		DatabaseName: databaseName,
+		databaseURL:  databaseURL,
+	}
+
+	return database, nil
 }
 
+// LogIn creates a session.
 func (c *CouchClient) LogIn() error {
-	sessionURL := c.apiURL.String() + "/_session"
+	sessionURL := c.rootURL.String() + "/_session"
 
 	data := url.Values{}
 	data.Set("name", c.username)
@@ -129,16 +173,21 @@ func (c *CouchClient) LogIn() error {
 	return nil // success
 }
 
+// LogOut deletes the current session.
 func (c *CouchClient) LogOut() {
-	sessionURL := c.apiURL.String() + "/_session"
+	sessionURL := c.rootURL.String() + "/_session"
 	job, _ := c.request("DELETE", sessionURL, nil) // ignore failures
-	defer job.Close()
+	job.Close()
 }
 
 func (c *CouchClient) request(method, path string, body io.Reader) (job *Job, err error) {
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
 		return
+	}
+
+	if req.Method == "POST" {
+		req.Header.Set("Content-Type", "application/json") // set Content-Type for POSTs
 	}
 
 	job = CreateJob(req)
@@ -149,15 +198,22 @@ func (c *CouchClient) request(method, path string, body io.Reader) (job *Job, er
 	return
 }
 
+// Execute submits a job for execution.
+// The client must call `job.Wait()` before attempting access the response attribute.
+// Always call `job.Close()` to ensure the underlying connection is terminated.
 func (c *CouchClient) Execute(job *Job) { c.jobQueue <- job }
 
+// Ping can be used to check whether a server is alive.
+// It sends an HTTP HEAD request to the server's URL.
 func (c *CouchClient) Ping() (err error) {
-	job, err := c.request("HEAD", c.apiURL.String(), nil)
-	defer job.Close()
+	job, err := c.request("HEAD", c.rootURL.String(), nil)
+	job.Close()
 
 	return
 }
 
+// Stop kills all running workers.
+// Once called the client is no longer able to execute new jobs.
 func (c *CouchClient) Stop() {
 	for _, worker := range c.workers {
 		worker.stop()
