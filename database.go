@@ -12,9 +12,9 @@ import (
 )
 
 type Database struct {
-	client       *CouchClient
-	DatabaseName string
-	databaseURL  *url.URL
+	client *CouchClient
+	Name   string
+	URL    *url.URL
 }
 
 type Info struct {
@@ -58,7 +58,7 @@ type SetResponse struct {
 
 // All returns a channel in which AllDocRow types can be received
 func (d *Database) All() (chan *AllDocRow, error) {
-	req, err := http.NewRequest("GET", d.databaseURL.String()+"/_all_docs", nil)
+	req, err := http.NewRequest("GET", d.URL.String()+"/_all_docs", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (d *Database) All() (chan *AllDocRow, error) {
 
 // Changes returns a channel in which Change types can be received
 func (d *Database) Changes() (chan *Change, error) {
-	req, err := http.NewRequest("GET", d.databaseURL.String()+"/_changes", nil)
+	req, err := http.NewRequest("GET", d.URL.String()+"/_changes", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (d *Database) Changes() (chan *Change, error) {
 // Info returns database information.
 // Attributes include document count, update seq, ...
 func (d *Database) Info() (info *Info, err error) {
-	job, err := d.client.request("GET", d.databaseURL.String(), nil)
+	job, err := d.client.request("GET", d.URL.String(), nil)
 	defer job.Close()
 	if err != nil {
 		return
@@ -173,7 +173,7 @@ func (d *Database) Get(documentId string, target interface{}) error {
 
 // Get a document with a specified revision.
 func (d *Database) GetWithRev(documentId, rev string, target interface{}) error {
-	docURL, err := url.Parse(d.databaseURL.String())
+	docURL, err := url.Parse(d.URL.String())
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (d *Database) GetWithRev(documentId, rev string, target interface{}) error 
 
 // Delete a document with a specified revision.
 func (d *Database) Delete(documentId, rev string) error {
-	docURL, err := url.Parse(d.databaseURL.String())
+	docURL, err := url.Parse(d.URL.String())
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,8 @@ func (d *Database) Delete(documentId, rev string) error {
 	return nil
 }
 
-// Set a document. The specified type must have an '_id' attribute.
+// Set a document. The specified type must have a json '_id' attribute.
+// Be sure to also include a json '_rev' attribute if you are updating an existing document.
 func (d *Database) Set(document interface{}) (string, error) {
 	jsonDocument, err := json.Marshal(document)
 	if err != nil {
@@ -229,14 +230,14 @@ func (d *Database) Set(document interface{}) (string, error) {
 	}
 
 	b := bytes.NewReader(jsonDocument)
-	job, err := d.client.request("POST", d.databaseURL.String(), b)
+	job, err := d.client.request("POST", d.URL.String(), b)
 	defer job.Close()
 
 	if err != nil {
 		return "", err
 	}
 
-	if job.response.StatusCode != 200 {
+	if job.response.StatusCode != 201 || job.response.StatusCode != 202 {
 		return "", fmt.Errorf(
 			"failed to delete document, status %d", job.response.StatusCode)
 	}

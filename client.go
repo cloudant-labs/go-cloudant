@@ -137,9 +137,9 @@ func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
 	}
 
 	database := &Database{
-		client:       c,
-		DatabaseName: databaseName,
-		databaseURL:  databaseURL,
+		client: c,
+		Name:   databaseName,
+		URL:    databaseURL,
 	}
 
 	return database, nil
