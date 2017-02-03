@@ -98,6 +98,11 @@ func (d *Database) All() (chan *AllDocRow, error) {
 	return results, nil
 }
 
+// Bulk returns a new bulk document uploader
+func (d *Database) Bulk(batchSize, concurrency int) *uploader {
+	return newUploader(d, batchSize, concurrency)
+}
+
 // Changes returns a channel in which Change types can be received
 func (d *Database) Changes() (chan *Change, error) {
 	req, err := http.NewRequest("GET", d.URL.String()+"/_changes", nil)
@@ -237,7 +242,7 @@ func (d *Database) Set(document interface{}) (string, error) {
 		return "", err
 	}
 
-	if job.response.StatusCode != 201 || job.response.StatusCode != 202 {
+	if job.response.StatusCode != 201 && job.response.StatusCode != 202 {
 		return "", fmt.Errorf(
 			"failed to delete document, status %d", job.response.StatusCode)
 	}

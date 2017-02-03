@@ -18,6 +18,7 @@ go get github.com/smithsz/go-cloudant
 - Keep-Alive & Connection Pooling
 - Hard limit on request concurrency
 - Stream `/_all_docs` & `/_changes`
+- Manages `_bulk_docs` uploads
 
 ## Getting Started
 
@@ -54,6 +55,30 @@ myDoc := &Doc{
 newRev, err := db.Set(myDoc)
 
 fmt.Println(newRev)  // prints '_rev' of new document revision
+```
+
+### Uploading documents via `_bulk_docs`:
+```go
+// create a Cloudant client (max. request concurrency 5)
+client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
+db, err := client.GetOrCreate("my_database")
+
+myDoc1 := Doc{
+        Id:     "doc1",
+        Rev:    "3-xxxxxxx",
+        Foo:    "bar",
+}
+
+myDoc2 := Doc{
+        Id:     "doc2",
+        Rev:    "3-xxxxxxx",
+        Foo:    "bar",
+}
+
+uploader = db.Bulk(10, 2) // new uploader using batch size 10, concurrency 2
+
+uploader.Upload(myDoc1)
+uploader.Upload(myDoc2)
 ```
 
 ### Get `/_all_docs`:
