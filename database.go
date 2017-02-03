@@ -57,7 +57,7 @@ type SetResponse struct {
 }
 
 // All returns a channel in which AllDocRow types can be received
-func (d *Database) All() (chan *AllDocRow, error) {
+func (d *Database) All() (<-chan *AllDocRow, error) {
 	req, err := http.NewRequest("GET", d.URL.String()+"/_all_docs", nil)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (d *Database) All() (chan *AllDocRow, error) {
 
 	results := make(chan *AllDocRow, 1000)
 
-	go func(job *Job, results chan *AllDocRow) {
+	go func(job *Job, results chan<- *AllDocRow) {
 		defer job.Close()
 		job.Wait()
 
@@ -104,7 +104,7 @@ func (d *Database) Bulk(batchSize, concurrency int) *Uploader {
 }
 
 // Changes returns a channel in which Change types can be received
-func (d *Database) Changes() (chan *Change, error) {
+func (d *Database) Changes() (<-chan *Change, error) {
 	req, err := http.NewRequest("GET", d.URL.String()+"/_changes", nil)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func (d *Database) Changes() (chan *Change, error) {
 
 	changes := make(chan *Change, 1000)
 
-	go func(job *Job, changes chan *Change) {
+	go func(job *Job, changes chan<- *Change) {
 		defer job.Close()
 		defer close(changes)
 
