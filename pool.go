@@ -87,7 +87,7 @@ func (w *worker) stop() {
 
 func startDispatcher(client *CouchClient, workerCount int) {
 	client.workers = make([]*worker, workerCount)
-	client.workerChan = make(chan chan *Job)
+	client.workerChan = make(chan chan *Job, workerCount)
 
 	// create workers
 	for i := 0; i < workerCount; i++ {

@@ -39,7 +39,7 @@ func newUploader(database *Database, batchSize, concurrency int) *Uploader {
 		batchSize:   batchSize,
 		database:    database,
 		uploadChan:  make(chan *BulkJob, 100),
-		workerChan:  make(chan chan *BulkJob),
+		workerChan:  make(chan chan *BulkJob, concurrency),
 		workers:     make([]*bulkWorker, 0),
 	}
 
