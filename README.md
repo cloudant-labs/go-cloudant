@@ -88,6 +88,8 @@ uploader := db.Bulk(10, 2) // new uploader using batch size 10, concurrency 2
 
 uploader.Upload(myDoc1)
 uploader.Upload(myDoc2)
+
+upload.Stop() // uploads any queued documents before stopping
 ```
 
 ### Using `/_all_docs`:
