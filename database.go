@@ -99,7 +99,7 @@ func (d *Database) All() (chan *AllDocRow, error) {
 }
 
 // Bulk returns a new bulk document uploader
-func (d *Database) Bulk(batchSize, concurrency int) *uploader {
+func (d *Database) Bulk(batchSize, concurrency int) *Uploader {
 	return newUploader(d, batchSize, concurrency)
 }
 

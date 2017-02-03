@@ -4,49 +4,54 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 )
 
 type BulkDocsRequest struct {
 	Docs []interface{} `json:"docs"`
 }
 
-type bulkWorker struct {
-	id       int
-	docChan  chan *interface{}
-	quitChan chan bool
-	uploader *uploader
+type BulkJob struct {
+	doc    interface{}
+	isDone chan bool
 }
 
-type uploader struct {
+func (j *BulkJob) Wait() { <-j.isDone }
+
+type bulkWorker struct {
+	id       int
+	jobChan  chan *BulkJob
+	quitChan chan bool
+	uploader *Uploader
+}
+
+type Uploader struct {
 	concurrency int
 	batchSize   int
 	database    *Database
-	uploadChann chan *interface{}
-	workerChann chan chan *interface{}
+	uploadChan  chan *BulkJob
+	workerChan  chan chan *BulkJob
 	workers     []*bulkWorker
 }
 
-func newUploader(database *Database, batchSize, concurrency int) *uploader {
-	uploader := uploader{
+func newUploader(database *Database, batchSize, concurrency int) *Uploader {
+	uploader := Uploader{
 		concurrency: concurrency,
 		batchSize:   batchSize,
 		database:    database,
-		uploadChann: make(chan *interface{}, 100),
-		workerChann: make(chan chan *interface{}),
-		workers:     make([]*bulkWorker, concurrency),
+		uploadChan:  make(chan *BulkJob, 100),
+		workerChan:  make(chan chan *BulkJob),
+		workers:     make([]*bulkWorker, 0),
 	}
 
-	LogFunc("start workers...")
 	uploader.start() // start workers
 
 	return &uploader
 }
 
-func newBulkWorker(id int, uploader *uploader) *bulkWorker {
+func newBulkWorker(id int, uploader *Uploader) *bulkWorker {
 	worker := &bulkWorker{
 		id:       id,
-		docChan:  make(chan *interface{}, 100),
+		jobChan:  make(chan *BulkJob, 100),
 		quitChan: make(chan bool),
 		uploader: uploader,
 	}
@@ -54,13 +59,12 @@ func newBulkWorker(id int, uploader *uploader) *bulkWorker {
 	return worker
 }
 
-func (u *uploader) start() {
+func (u *Uploader) start() {
 	// start workers
 	for i := 0; i < u.concurrency; i++ {
 		worker := newBulkWorker(i+1, u)
-		u.workers[i] = worker
+		u.workers = append(u.workers, worker)
 
-		LogFunc("starting...")
 		worker.start()
 	}
 
@@ -68,41 +72,81 @@ func (u *uploader) start() {
 	go func() {
 		for {
 			select {
-			case doc := <-u.uploadChann:
+			case job := <-u.uploadChan:
 				go func() {
-					worker := <-u.workerChann
-					worker <- doc
+					worker := <-u.workerChan
+					worker <- job
 				}()
 			}
 		}
 	}()
 }
 
-func (u *uploader) Upload(doc interface{}) { u.uploadChann <- &doc }
+// Stop uploads all received documents and then terminates the upload worker(s)
+func (u *Uploader) Stop() {
+	for _, worker := range u.workers {
+		worker.stop()
+	}
+}
+
+// Upload adds a document to the upload queue ready for processing by the upload worker(s)
+func (u *Uploader) Upload(doc interface{}) *BulkJob {
+	job := &BulkJob{
+		doc:    doc,
+		isDone: make(chan bool),
+	}
+	go func() { u.uploadChan <- job }()
+
+	return job
+}
 
 func (w *bulkWorker) start() {
 	go func() {
-		bulkDocs := &BulkDocsRequest{
-			Docs: make([]interface{}, 0),
-		}
-		for {
-			w.uploader.workerChann <- w.docChan
-			select {
-			case doc := <-w.docChan:
-				if len(bulkDocs.Docs) == w.uploader.batchSize {
-					err := uploadBulkDocs(bulkDocs, w.uploader.database)
-					if err != nil {
-						LogFunc("bulk upload error - %s", err)
-					}
+		bulkDocs := &BulkDocsRequest{Docs: make([]interface{}, 0)}
+		liveJobs := make([]*BulkJob, 0)
 
-					bulkDocs.Docs = make([]interface{}, 0) // clear bulk docs
+		for {
+			w.uploader.workerChan <- w.jobChan
+
+			select {
+			case job := <-w.jobChan:
+				bulkDocs.Docs = append(bulkDocs.Docs, job.doc)
+				liveJobs = append(liveJobs, job)
+
+				if len(bulkDocs.Docs) >= w.uploader.batchSize {
+					processJobs(liveJobs, bulkDocs, w.uploader)
+
+					// reset
+					liveJobs = liveJobs[:0]
+					bulkDocs.Docs = bulkDocs.Docs[:0]
 				}
-				bulkDocs.Docs = append(bulkDocs.Docs, *doc)
+
 			case <-w.quitChan:
+				processJobs(liveJobs, bulkDocs, w.uploader)
+
 				return
 			}
 		}
 	}()
+}
+
+func (w *bulkWorker) stop() {
+	go func() { w.quitChan <- true }()
+}
+
+func processJobs(jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
+	if len(req.Docs) == 0 {
+		return
+	}
+
+	err := uploadBulkDocs(req, uploader.database)
+	if err != nil {
+		LogFunc("bulk upload error - %s", err)
+	}
+
+	for _, j := range jobs {
+		j.isDone <- true
+	}
 }
 
 func uploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) error {
@@ -111,14 +155,9 @@ func uploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) error {
 		return err
 	}
 
-	LogFunc("%s", jsonBulkDocs)
-
 	b := bytes.NewReader(jsonBulkDocs)
 	job, err := database.client.request("POST", database.URL.String()+"/_bulk_docs", b)
 	defer job.Close()
-
-	body, _ := ioutil.ReadAll(job.response.Body)
-	LogFunc("%s", body)
 
 	if err != nil {
 		return err

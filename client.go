@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"path"
 	"time"
 )
 
@@ -77,6 +78,8 @@ func (c *CouchClient) Delete(databaseName string) error {
 	if err != nil {
 		return err
 	}
+
+	databaseURL.Path = path.Join(databaseURL.Path, databaseName)
 
 	job, err := c.request("DELETE", databaseURL.String(), nil)
 	defer job.Close()
