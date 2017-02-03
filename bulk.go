@@ -18,10 +18,11 @@ type BulkJob struct {
 func (j *BulkJob) Wait() { <-j.isDone }
 
 type bulkWorker struct {
-	id       int
-	jobChan  chan *BulkJob
-	quitChan chan bool
-	uploader *Uploader
+	id       	int
+	flushChan	chan bool
+	jobChan  	chan *BulkJob
+	quitChan 	chan bool
+	uploader 	*Uploader
 }
 
 type Uploader struct {
@@ -50,13 +51,21 @@ func newUploader(database *Database, batchSize, concurrency int) *Uploader {
 
 func newBulkWorker(id int, uploader *Uploader) *bulkWorker {
 	worker := &bulkWorker{
-		id:       id,
-		jobChan:  make(chan *BulkJob, 100),
-		quitChan: make(chan bool),
-		uploader: uploader,
+		id:       	id,
+		flushChan:	make(chan bool),
+		jobChan:  	make(chan *BulkJob, 100),
+		quitChan: 	make(chan bool),
+		uploader: 	uploader,
 	}
 
 	return worker
+}
+
+// Flush uploads all received documents
+func (u *Uploader) Flush() {
+	for _, worker := range u.workers {
+		worker.flush()
+	}
 }
 
 func (u *Uploader) start() {
@@ -93,11 +102,15 @@ func (u *Uploader) Stop() {
 func (u *Uploader) Upload(doc interface{}) *BulkJob {
 	job := &BulkJob{
 		doc:    doc,
-		isDone: make(chan bool),
+		isDone: make(chan bool, 1),
 	}
 	go func() { u.uploadChan <- job }()
 
 	return job
+}
+
+func (w *bulkWorker) flush() {
+	go func() { w.flushChan <- true }()
 }
 
 func (w *bulkWorker) start() {
@@ -115,10 +128,11 @@ func (w *bulkWorker) start() {
 
 				if len(bulkDocs.Docs) >= w.uploader.batchSize {
 					processJobs(liveJobs, bulkDocs, w.uploader)
+				}
 
-					// reset
-					liveJobs = liveJobs[:0]
-					bulkDocs.Docs = bulkDocs.Docs[:0]
+			case <-w.flushChan:
+				if len(bulkDocs.Docs) > 0 {
+					processJobs(liveJobs, bulkDocs, w.uploader)
 				}
 
 			case <-w.quitChan:
@@ -147,6 +161,10 @@ func processJobs(jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
 	for _, j := range jobs {
 		j.isDone <- true
 	}
+
+	// reset
+	jobs = jobs[:0]
+	req.Docs = req.Docs[:0]
 }
 
 func uploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) error {
@@ -156,6 +174,9 @@ func uploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) error {
 	}
 
 	b := bytes.NewReader(jsonBulkDocs)
+
+	LogFunc("%s", b)
+
 	job, err := database.client.request("POST", database.URL.String()+"/_bulk_docs", b)
 	defer job.Close()
 

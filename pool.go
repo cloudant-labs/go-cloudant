@@ -20,7 +20,7 @@ func CreateJob(request *http.Request) *Job {
 		request:  request,
 		response: nil,
 		error:    nil,
-		isDone:   make(chan bool),
+		isDone:   make(chan bool, 1), // mark as done is non-blocking for worker
 	}
 
 	return job
