@@ -57,7 +57,16 @@ newRev, err := db.Set(myDoc)
 fmt.Println(newRev)  // prints '_rev' of new document revision
 ```
 
-### Uploading documents via `_bulk_docs`:
+### `Delete` a document:
+```go
+// create a Cloudant client (max. request concurrency 5)
+client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
+db, err := client.GetOrCreate("my_database")
+
+err := db.Delete("my_doc_id", "2-xxxxxxx")
+```
+
+### Using `_bulk_docs`:
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -75,13 +84,13 @@ myDoc2 := Doc{
         Foo:    "bar",
 }
 
-uploader = db.Bulk(10, 2) // new uploader using batch size 10, concurrency 2
+uploader := db.Bulk(10, 2) // new uploader using batch size 10, concurrency 2
 
 uploader.Upload(myDoc1)
 uploader.Upload(myDoc2)
 ```
 
-### Get `/_all_docs`:
+### Using `/_all_docs`:
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -99,7 +108,7 @@ for{
 }
 ```
 
-### Get `/_changes`:
+### Using `/_changes`:
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
