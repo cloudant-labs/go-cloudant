@@ -153,15 +153,15 @@ func (c *CouchClient) LogIn() error {
 	sessionURL := c.rootURL.String() + "/_session"
 
 	data := url.Values{}
-	data.Set("name", c.username)
-	data.Set("password", c.password)
+	data.Add("name", c.username)
+	data.Add("password", c.password)
 
 	req, err := http.NewRequest("POST", sessionURL, bytes.NewBufferString(data.Encode()))
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	job := CreateJob(req)
 	defer job.Close()
@@ -190,7 +190,7 @@ func (c *CouchClient) request(method, path string, body io.Reader) (job *Job, er
 	}
 
 	if req.Method == "POST" {
-		req.Header.Set("Content-Type", "application/json") // set Content-Type for POSTs
+		req.Header.Add("Content-Type", "application/json") // add Content-Type for POSTs
 	}
 
 	job = CreateJob(req)

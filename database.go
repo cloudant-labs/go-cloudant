@@ -8,22 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 )
 
-type Database struct {
-	client *CouchClient
-	Name   string
-	URL    *url.URL
-}
-
-type Info struct {
-	IsCompactRunning bool   `json:"compact_running"`
-	DataSize         int    `json:"data_size"`
-	DocDelCount      int    `json:"doc_del_count"`
-	DocCount         int    `json:"doc_count"`
-	DiskSize         int    `json:"disk_size"`
-	UpdateSeq        string `json:"update_seq"`
+type AllDocsQuery struct {
+	Limit    int
+	StartKey string
+	EndKey   string
 }
 
 type AllDocRow struct {
@@ -51,6 +43,21 @@ type ChangeChanges struct {
 	Rev string `json:"rev"`
 }
 
+type Database struct {
+	client *CouchClient
+	Name   string
+	URL    *url.URL
+}
+
+type Info struct {
+	IsCompactRunning bool   `json:"compact_running"`
+	DataSize         int    `json:"data_size"`
+	DocDelCount      int    `json:"doc_del_count"`
+	DocCount         int    `json:"doc_count"`
+	DiskSize         int    `json:"disk_size"`
+	UpdateSeq        string `json:"update_seq"`
+}
+
 type SetResponse struct {
 	Id  string `json:"id"`
 	Rev string `json:"rev"`
@@ -58,10 +65,32 @@ type SetResponse struct {
 
 // All returns a channel in which AllDocRow types can be received
 func (d *Database) All() (<-chan *AllDocRow, error) {
-	req, err := http.NewRequest("GET", d.URL.String()+"/_all_docs", nil)
+	return d.AllWithQuery(&AllDocsQuery{})
+}
+
+// AllWithQuery returns a channel in which AllDocRow types can be received
+func (d *Database) AllWithQuery(options *AllDocsQuery) (<-chan *AllDocRow, error) {
+	allDocsURL, err := url.Parse(d.URL.String())
 	if err != nil {
 		return nil, err
 	}
+
+	allDocsURL.Path = path.Join(allDocsURL.Path, "_all_docs")
+
+	q := allDocsURL.Query()
+	if options.Limit > 0 {
+		q.Add("limit", strconv.Itoa(options.Limit))
+	}
+	if options.StartKey != "" {
+		q.Add("startkey", options.StartKey)
+	}
+	if options.EndKey != "" {
+		q.Add("endkey", options.EndKey)
+	}
+
+	allDocsURL.RawQuery = q.Encode()
+
+	req, err := http.NewRequest("GET", allDocsURL.String(), nil)
 
 	job := CreateJob(req)
 	d.client.Execute(job)
@@ -187,7 +216,9 @@ func (d *Database) GetWithRev(documentId, rev string, target interface{}) error 
 
 	if rev != "" {
 		q := docURL.Query()
-		q.Set("rev", rev)
+		q.Add("rev", rev)
+
+		docURL.RawQuery = q.Encode()
 	}
 
 	job, err := d.client.request("GET", docURL.String(), nil)
@@ -208,9 +239,10 @@ func (d *Database) Delete(documentId, rev string) error {
 
 	docURL.Path = path.Join(docURL.Path, documentId)
 
-	// add 'rev' param
 	q := docURL.Query()
-	q.Set("rev", rev)
+	q.Add("rev", rev) // add 'rev' param
+
+	docURL.RawQuery = q.Encode()
 
 	job, err := d.client.request("DELETE", docURL.String(), nil)
 	defer job.Close()
