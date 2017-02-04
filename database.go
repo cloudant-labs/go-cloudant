@@ -12,18 +12,18 @@ import (
 	"strings"
 )
 
-type AllDocsQuery struct {
+type AllQuery struct {
 	Limit    int
 	StartKey string
 	EndKey   string
 }
 
-type AllDocRow struct {
+type AllRow struct {
 	Id    string      `json:"id"`
-	Value AllDocValue `json:"value"`
+	Value AllRowValue `json:"value"`
 }
 
-type AllDocValue struct {
+type AllRowValue struct {
 	Rev string `json:"rev"`
 }
 
@@ -33,13 +33,13 @@ type Change struct {
 	Seq string
 }
 
-type ChangeResults struct {
-	Id      string          `json:"id"`
-	Seq     string          `json:"seq"`
-	Changes []ChangeChanges `json:"changes"`
+type ChangeRow struct {
+	Id      string             `json:"id"`
+	Seq     string             `json:"seq"`
+	Changes []ChangeRowChanges `json:"changes"`
 }
 
-type ChangeChanges struct {
+type ChangeRowChanges struct {
 	Rev string `json:"rev"`
 }
 
@@ -47,6 +47,11 @@ type Database struct {
 	client *CouchClient
 	Name   string
 	URL    *url.URL
+}
+
+type DocumentMeta struct {
+	Id  string `json:"id"`
+	Rev string `json:"rev"`
 }
 
 type Info struct {
@@ -58,19 +63,14 @@ type Info struct {
 	UpdateSeq        string `json:"update_seq"`
 }
 
-type SetResponse struct {
-	Id  string `json:"id"`
-	Rev string `json:"rev"`
-}
-
 // All returns a channel in which AllDocRow types can be received.
-func (d *Database) All() (<-chan *AllDocRow, error) {
-	return d.AllQ(&AllDocsQuery{})
+func (d *Database) All() (<-chan *DocumentMeta, error) {
+	return d.AllQ(&AllQuery{})
 }
 
 // AllQ returns a channel in which AllDocRow types can be received.
 // The query definition is passed as type AllDocsQuery.
-func (d *Database) AllQ(options *AllDocsQuery) (<-chan *AllDocRow, error) {
+func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
 	allDocsURL, err := url.Parse(d.URL.String())
 	if err != nil {
 		return nil, err
@@ -79,14 +79,14 @@ func (d *Database) AllQ(options *AllDocsQuery) (<-chan *AllDocRow, error) {
 	allDocsURL.Path = path.Join(allDocsURL.Path, "_all_docs")
 
 	q := allDocsURL.Query()
-	if options.Limit > 0 {
-		q.Add("limit", strconv.Itoa(options.Limit))
+	if query.Limit > 0 {
+		q.Add("limit", strconv.Itoa(query.Limit))
 	}
-	if options.StartKey != "" {
-		q.Add("startkey", options.StartKey)
+	if query.StartKey != "" {
+		q.Add("startkey", query.StartKey)
 	}
-	if options.EndKey != "" {
-		q.Add("endkey", options.EndKey)
+	if query.EndKey != "" {
+		q.Add("endkey", query.EndKey)
 	}
 
 	allDocsURL.RawQuery = q.Encode()
@@ -96,9 +96,9 @@ func (d *Database) AllQ(options *AllDocsQuery) (<-chan *AllDocRow, error) {
 	job := CreateJob(req)
 	d.client.Execute(job)
 
-	results := make(chan *AllDocRow, 1000)
+	results := make(chan *DocumentMeta, 1000)
 
-	go func(job *Job, results chan<- *AllDocRow) {
+	go func(job *Job, results chan<- *DocumentMeta) {
 		defer job.Close()
 		job.Wait()
 
@@ -115,11 +115,14 @@ func (d *Database) AllQ(options *AllDocsQuery) (<-chan *AllDocRow, error) {
 			lineStr = strings.TrimRight(lineStr, ",") // remove trailing comma
 
 			if len(lineStr) > 7 && lineStr[0:7] == "{\"id\":\"" {
-				var result = new(AllDocRow)
+				var result = new(AllRow)
 
 				err := json.Unmarshal([]byte(lineStr), result)
 				if err == nil {
-					results <- result
+					results <- &DocumentMeta{
+						Id:  result.Id,
+						Rev: result.Value.Rev,
+					}
 				}
 			}
 		}
@@ -163,7 +166,7 @@ func (d *Database) Changes() (<-chan *Change, error) {
 			lineStr = strings.TrimRight(lineStr, ",") // remove trailing comma
 
 			if len(lineStr) > 8 && lineStr[0:8] == "{\"seq\":\"" {
-				var change = new(ChangeResults)
+				var change = new(ChangeRow)
 
 				err := json.Unmarshal([]byte(lineStr), change)
 				if err == nil && len(change.Changes) == 1 {
@@ -280,7 +283,7 @@ func (d *Database) Set(document interface{}) (string, error) {
 			"failed to delete document, status %d", job.response.StatusCode)
 	}
 
-	resp := new(SetResponse)
+	resp := new(DocumentMeta)
 	err = json.NewDecoder(job.response.Body).Decode(resp)
 
 	return resp.Rev, err

@@ -105,7 +105,7 @@ allDocs, err := db.All()
 
 // OR include some query options...
 //
-// q := &cloudant.AllDocsQuery{
+// q := &cloudant.AllQuery{
 //     Limit:	    123,
 //     StartKey:    "bar",
 //     EndKey:      "foo",
@@ -115,7 +115,7 @@ allDocs, err := db.All()
 for{
     doc, more := <-allDocs
 	if more {
-	    fmt.Println(doc.Id, doc.Value.Rev)  // prints document 'id' and 'rev'
+	    fmt.Println(doc.Id, doc.Rev)  // prints document 'id' and 'rev'
 	} else {
 	    break
 	}
