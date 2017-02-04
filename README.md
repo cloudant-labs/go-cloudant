@@ -84,9 +84,12 @@ myDoc2 := Doc{
         Foo:    "bar",
 }
 
-uploader := db.Bulk(10, 2) // new uploader using batch size 10, concurrency 2
+uploader := db.Bulk(50, 5) // new uploader using batch size 50, concurrency 5
 
 uploader.Upload(myDoc1)
+
+upload.Flush() // uploads all received documents
+
 uploader.Upload(myDoc2)
 
 upload.Stop() // uploads any queued documents before stopping
@@ -98,7 +101,16 @@ upload.Stop() // uploads any queued documents before stopping
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
 db, err := client.GetOrCreate("my_database")
 
-allDocs, err := db.AllDocs()
+allDocs, err := db.All()
+
+// OR include some query options...
+//
+// q := &cloudant.AllDocsQuery{
+//     Limit:	    123,
+//     StartKey:    "bar",
+//     EndKey:      "foo",
+// }
+// allDocs, err := db.AllQ(q)
 
 for{
     doc, more := <-allDocs

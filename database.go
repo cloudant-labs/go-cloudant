@@ -63,13 +63,14 @@ type SetResponse struct {
 	Rev string `json:"rev"`
 }
 
-// All returns a channel in which AllDocRow types can be received
+// All returns a channel in which AllDocRow types can be received.
 func (d *Database) All() (<-chan *AllDocRow, error) {
-	return d.AllWithQuery(&AllDocsQuery{})
+	return d.AllQ(&AllDocsQuery{})
 }
 
-// AllWithQuery returns a channel in which AllDocRow types can be received
-func (d *Database) AllWithQuery(options *AllDocsQuery) (<-chan *AllDocRow, error) {
+// AllQ returns a channel in which AllDocRow types can be received.
+// The query definition is passed as type AllDocsQuery.
+func (d *Database) AllQ(options *AllDocsQuery) (<-chan *AllDocRow, error) {
 	allDocsURL, err := url.Parse(d.URL.String())
 	if err != nil {
 		return nil, err
@@ -127,12 +128,12 @@ func (d *Database) AllWithQuery(options *AllDocsQuery) (<-chan *AllDocRow, error
 	return results, nil
 }
 
-// Bulk returns a new bulk document uploader
+// Bulk returns a new bulk document uploader.
 func (d *Database) Bulk(batchSize, concurrency int) *Uploader {
 	return newUploader(d, batchSize, concurrency)
 }
 
-// Changes returns a channel in which Change types can be received
+// Changes returns a channel in which Change types can be received.
 func (d *Database) Changes() (<-chan *Change, error) {
 	req, err := http.NewRequest("GET", d.URL.String()+"/_changes", nil)
 	if err != nil {
