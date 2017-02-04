@@ -127,8 +127,12 @@ func (w *bulkWorker) start() {
 		bulkDocs := &BulkDocsRequest{Docs: make([]interface{}, 0)}
 		liveJobs := make([]*BulkJob, 0)
 
+		moreWork := true
+
 		for {
-			w.uploader.workerChan <- w.jobChan
+			if moreWork {
+				w.uploader.workerChan <- w.jobChan
+			}
 
 			select {
 			case job := <-w.jobChan:
@@ -140,12 +144,16 @@ func (w *bulkWorker) start() {
 					liveJobs = liveJobs[:0] // clear jobs
 				}
 
+				moreWork = true
+
 			case job := <-w.flushChan:
 				if len(bulkDocs.Docs) > 0 {
 					processJobs(liveJobs, bulkDocs, w.uploader)
 					liveJobs = liveJobs[:0] // clear jobs
 				}
 				job.isDone <- true // mark flush complete
+
+				moreWork = false
 
 			case job := <-w.quitChan:
 				if len(bulkDocs.Docs) > 0 {
