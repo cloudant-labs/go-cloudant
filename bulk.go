@@ -15,6 +15,10 @@ type BulkJob struct {
 	isDone chan bool
 }
 
+// Mark job as done.
+func (j *BulkJob) done() { j.isDone <- true }
+
+// Block while the job is being executed.
 func (j *BulkJob) Wait() { <-j.isDone }
 
 type bulkWorker struct {
@@ -151,7 +155,7 @@ func (w *bulkWorker) start() {
 					processJobs(liveJobs, bulkDocs, w.uploader)
 					liveJobs = liveJobs[:0] // clear jobs
 				}
-				job.isDone <- true // mark flush complete
+				job.done()
 
 				moreWork = false
 
@@ -159,7 +163,7 @@ func (w *bulkWorker) start() {
 				if len(bulkDocs.Docs) > 0 {
 					processJobs(liveJobs, bulkDocs, w.uploader)
 				}
-				job.isDone <- true // mark flush complete
+				job.done()
 
 				return
 			}
@@ -187,7 +191,7 @@ func processJobs(jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
 	req.Docs = req.Docs[:0] // reset
 
 	for _, j := range jobs {
-		j.isDone <- true
+		j.done()
 	}
 }
 

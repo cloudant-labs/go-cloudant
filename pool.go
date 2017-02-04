@@ -32,6 +32,9 @@ func (j *Job) Close() {
 	j.response.Body.Close()
 }
 
+// Mark job as done.
+func (j *Job) done() { j.isDone <- true }
+
 // Block while the job is being executed.
 func (j *Job) Wait() { <-j.isDone }
 
@@ -58,12 +61,11 @@ var workerFunc func(worker *worker, job *Job) // func executed by workers
 func (w *worker) start() {
 	if workerFunc == nil {
 		workerFunc = func(worker *worker, job *Job) {
+			defer job.done()
 			LogFunc("Request: %s %s", job.request.Method, job.request.URL.String())
 			resp, err := worker.client.httpClient.Do(job.request)
 			job.response = resp
 			job.error = err
-
-			job.isDone <- true // mark as done
 		}
 	}
 	go func() {
