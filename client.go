@@ -2,7 +2,6 @@ package cloudant
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -90,7 +89,7 @@ func (c *CouchClient) Delete(databaseName string) error {
 
 	if job.response.StatusCode != 200 {
 		return fmt.Errorf(
-			"failed to delete database %s, status %s", databaseName, job.response.StatusCode)
+			"failed to delete database %s, status %d", databaseName, job.response.StatusCode)
 	}
 
 	return nil
@@ -136,7 +135,8 @@ func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
 	}
 
 	if job.response.StatusCode != 201 && job.response.StatusCode != 412 {
-		return nil, errors.New("failed to create database")
+		return nil, fmt.Errorf(
+			"failed to create database, status %d", job.response.StatusCode)
 	}
 
 	database := &Database{
