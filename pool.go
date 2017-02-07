@@ -28,8 +28,10 @@ func CreateJob(request *http.Request) *Job {
 
 // To prevent a memory leak the response body must be closed (even when it is not used).
 func (j *Job) Close() {
-	io.Copy(ioutil.Discard, j.response.Body)
-	j.response.Body.Close()
+	if j.response != nil {
+		io.Copy(ioutil.Discard, j.response.Body)
+		j.response.Body.Close()
+	}
 }
 
 // Mark job as done.
