@@ -48,13 +48,13 @@ func TestDatabase_Changes(t *testing.T) {
 		change, more := <-changes
 		if more {
 			i += 1
-			if change.Id != fmt.Sprintf("doc%d", i) {
+			if fmt.Sprintf("doc%d", i) != change.Id  {
 				t.Errorf("unexpected change id %s", change.Id)
 			}
-			if change.Seq != fmt.Sprintf("%d-xxxxx", i) {
+			if fmt.Sprintf("%d-xxxxx", i) != change.Seq {
 				t.Errorf("unexpected change seq %s", change.Id)
 			}
-			if change.Rev != "1-967a00dff5e02add41819138abb3284d" {
+			if "1-967a00dff5e02add41819138abb3284d" != change.Rev {
 				t.Errorf("unexpected rev value %s", change.Rev)
 			}
 		} else {
@@ -62,7 +62,7 @@ func TestDatabase_Changes(t *testing.T) {
 		}
 	}
 
-	if i != 5 {
+	if 5 != i {
 		t.Errorf("unexpected number of changes received %d", i)
 	}
 

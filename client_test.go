@@ -8,7 +8,7 @@ import (
 func TestCouchClient_LogIn(t *testing.T) {
 	setupClient()
 
-	if len(capturedJobs) != 1 {
+	if 1 != len(capturedJobs) {
 		t.Error("unexpected request sent to server")
 	}
 
