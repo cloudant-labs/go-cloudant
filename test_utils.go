@@ -2,6 +2,7 @@ package cloudant
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 )
@@ -14,10 +15,20 @@ var testUsername string = "user-foo"
 var testPassword string = "pa$$w0rd01"
 var testDatabaseName string = "test-database-1"
 
+type TestDocument struct {
+	Foo string `json:"foo"`
+	Bar int    `json:"bar"`
+}
+
 // mock responses
 var mock200 = &http.Response{
 	Status:     "200 OK",
 	StatusCode: 200,
+	Body:       ioutil.NopCloser(bytes.NewReader([]byte("foobar"))),
+}
+var mock201 = &http.Response{
+	Status:     "201 CREATED",
+	StatusCode: 201,
 	Body:       ioutil.NopCloser(bytes.NewReader([]byte("foobar"))),
 }
 var mock412 = &http.Response{
@@ -40,10 +51,13 @@ func setupMocks(responses []*http.Response) {
 	mockResponses = responses
 
 	workerFunc = func(worker *worker, job *Job) {
+		//fmt.Println("captured job", job.request.URL.String())
+
 		capturedJobs = append(capturedJobs, job)
 
 		if len(mockResponses) == 0 {
-			panic("unexpected request sent to server")
+			panic(fmt.Sprintf("unexpected request sent to server, %s",
+				job.request.URL.String()))
 		}
 
 		job.response = mockResponses[0]
