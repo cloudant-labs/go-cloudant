@@ -25,13 +25,14 @@ var ResponseHeaderTimeout time.Duration = 10 * time.Second
 var ExpectContinueTimeout time.Duration = 1 * time.Second
 
 type CouchClient struct {
-	username   string
-	password   string
-	rootURL    *url.URL
-	httpClient *http.Client
-	jobQueue   chan *Job
-	workers    []*worker
-	workerChan chan chan *Job
+	username    string
+	password    string
+	rootURL     *url.URL
+	httpClient  *http.Client
+	jobQueue    chan *Job
+	workers     []*worker
+	workerChan  chan chan *Job
+	workerCount int
 }
 
 // CreateClient returns a new client.
@@ -57,14 +58,15 @@ func CreateClient(username, password, rootStrURL string, concurrency int) (*Couc
 	}
 
 	couchClient := CouchClient{
-		username:   username,
-		password:   password,
-		rootURL:    apiURL,
-		httpClient: c,
-		jobQueue:   make(chan *Job, 100),
+		username:    username,
+		password:    password,
+		rootURL:     apiURL,
+		httpClient:  c,
+		jobQueue:    make(chan *Job, 100),
+		workerCount: concurrency,
 	}
 
-	startDispatcher(&couchClient, concurrency) // start workers
+	startDispatcher(&couchClient) // start workers
 
 	couchClient.LogIn() // create initial session
 

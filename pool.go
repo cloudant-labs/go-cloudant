@@ -89,12 +89,12 @@ func (w *worker) stop() {
 	}()
 }
 
-func startDispatcher(client *CouchClient, workerCount int) {
-	client.workers = make([]*worker, workerCount)
-	client.workerChan = make(chan chan *Job, workerCount)
+func startDispatcher(client *CouchClient) {
+	client.workers = make([]*worker, client.workerCount)
+	client.workerChan = make(chan chan *Job, client.workerCount)
 
 	// create workers
-	for i := 0; i < workerCount; i++ {
+	for i := 0; i < client.workerCount; i++ {
 		worker := newWorker(i+1, client)
 		client.workers[i] = &worker
 		worker.start()

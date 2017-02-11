@@ -41,7 +41,7 @@ func setupClient() (client *CouchClient) {
 	setupMocks([]*http.Response{mock200})
 
 	client, _ = CreateClient(
-		testUsername, testPassword, "https://"+testUsername+".cloudant.com", 5)
+		testUsername, testPassword, "https://"+testUsername+".cloudant.com", 1)
 
 	return
 }

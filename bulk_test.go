@@ -12,7 +12,7 @@ func TestUploader_Upload(t *testing.T) {
 
 	setupMocks([]*http.Response{mock201})
 
-	uploader := database.Bulk(5, 1) // batch size 5
+	uploader := database.Bulk(5) // batch size 5
 
 	// upload 5 documents
 	for i := 0; i < 5; i++ {

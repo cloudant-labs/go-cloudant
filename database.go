@@ -132,8 +132,8 @@ func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
 }
 
 // Bulk returns a new bulk document uploader.
-func (d *Database) Bulk(batchSize, concurrency int) *Uploader {
-	return newUploader(d, batchSize, concurrency)
+func (d *Database) Bulk(batchSize int) *Uploader {
+	return newUploader(d, batchSize, d.client.workerCount)
 }
 
 // Changes returns a channel in which Change types can be received.
