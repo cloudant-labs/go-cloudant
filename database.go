@@ -96,11 +96,18 @@ func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
 	job := CreateJob(req)
 	d.client.Execute(job)
 
+	job.Wait()
+
+	if job.response.StatusCode != 200 {
+		job.done()
+		return nil, fmt.Errorf("failed to get database all docs, status %d",
+			job.response.StatusCode)
+	}
+
 	results := make(chan *DocumentMeta, 1000)
 
 	go func(job *Job, results chan<- *DocumentMeta) {
 		defer job.Close()
-		job.Wait()
 
 		reader := bufio.NewReader(job.response.Body)
 
@@ -146,13 +153,19 @@ func (d *Database) Changes() (<-chan *Change, error) {
 	job := CreateJob(req)
 	d.client.Execute(job)
 
+	job.Wait()
+
+	if job.response.StatusCode != 200 {
+		job.done()
+		return nil, fmt.Errorf("failed to get database changes, status %d",
+			job.response.StatusCode)
+	}
+
 	changes := make(chan *Change, 1000)
 
 	go func(job *Job, changes chan<- *Change) {
 		defer job.Close()
 		defer close(changes)
-
-		job.Wait()
 
 		reader := bufio.NewReader(job.response.Body)
 
