@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -25,18 +26,29 @@ var ResponseHeaderTimeout time.Duration = 10 * time.Second
 var ExpectContinueTimeout time.Duration = 1 * time.Second
 
 type CouchClient struct {
-	username    string
-	password    string
-	rootURL     *url.URL
-	httpClient  *http.Client
-	jobQueue    chan *Job
-	workers     []*worker
-	workerChan  chan chan *Job
-	workerCount int
+	username      string
+	password      string
+	rootURL       *url.URL
+	httpClient    *http.Client
+	jobQueue      chan *Job
+	retryCountMax int
+	retryDelayMin int
+	retryDelayMax int
+	workers       []*worker
+	workerChan    chan chan *Job
+	workerCount   int
 }
 
-// CreateClient returns a new client.
+// CreateClient returns a new client (with max. retry 3 using a random 5-30 secs delay).
 func CreateClient(username, password, rootStrURL string, concurrency int) (*CouchClient, error) {
+	return CreateClientWithRetry(username, password, rootStrURL, concurrency, 3, 5, 30)
+}
+
+func CreateClientWithRetry(username, password, rootStrURL string, concurrency, retryCountMax,
+	retryDelayMin, retryDelayMax int) (*CouchClient, error) {
+
+	rand.Seed(time.Now().Unix()) // seed value for job retry start delays
+
 	cookieJar, _ := cookiejar.New(nil)
 
 	c := &http.Client{
@@ -58,12 +70,15 @@ func CreateClient(username, password, rootStrURL string, concurrency int) (*Couc
 	}
 
 	couchClient := CouchClient{
-		username:    username,
-		password:    password,
-		rootURL:     apiURL,
-		httpClient:  c,
-		jobQueue:    make(chan *Job, 100),
-		workerCount: concurrency,
+		username:      username,
+		password:      password,
+		rootURL:       apiURL,
+		httpClient:    c,
+		jobQueue:      make(chan *Job, 100),
+		retryCountMax: retryCountMax,
+		retryDelayMin: retryDelayMin,
+		retryDelayMax: retryDelayMax,
+		workerCount:   concurrency,
 	}
 
 	startDispatcher(&couchClient) // start workers

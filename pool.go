@@ -3,15 +3,18 @@ package cloudant
 import (
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
+	"time"
 )
 
 // All requests are wrapped in a Job type.
 type Job struct {
-	request  *http.Request
-	response *http.Response
-	error    error
-	isDone   chan bool
+	request    *http.Request
+	response   *http.Response
+	retryCount int
+	error      error
+	isDone     chan bool
 }
 
 // Creates a new Job from a HTTP request.
@@ -60,14 +63,35 @@ func newWorker(id int, client *CouchClient) worker {
 
 var workerFunc func(worker *worker, job *Job) // func executed by workers
 
+// Generates a random int within the range [min, max]
+func random(min, max int) int { return rand.Intn(max-min) + min }
+
 func (w *worker) start() {
 	if workerFunc == nil {
 		workerFunc = func(worker *worker, job *Job) {
-			defer job.done()
-			LogFunc("Request: %s %s", job.request.Method, job.request.URL.String())
+			LogFunc("Request (attempt: %d) %s %s", job.retryCount, job.request.Method,
+				job.request.URL.String())
 			resp, err := worker.client.httpClient.Do(job.request)
+
+			if err != nil || resp.StatusCode == 429 || resp.StatusCode >= 500 {
+
+				if job.retryCount < w.client.retryCountMax {
+					job.retryCount += 1
+
+					go func(startDelay int) {
+						time.Sleep(time.Duration(startDelay) * time.Second)
+						w.client.Execute(job)
+					}(random(w.client.retryDelayMin, w.client.retryDelayMax))
+
+					return
+				} else {
+					LogFunc("%s %s failed, too many retries",
+						job.request.Method, job.request.URL.String())
+				}
+			}
 			job.response = resp
 			job.error = err
+			job.done()
 		}
 	}
 	go func() {

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"testing"
 	"regexp"
+	"testing"
 )
 
 func TestUploader_Upload(t *testing.T) {
