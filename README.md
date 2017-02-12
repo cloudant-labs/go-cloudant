@@ -74,25 +74,43 @@ db, err := client.GetOrCreate("my_database")
 
 myDoc1 := Doc{
         Id:     "doc1",
-        Rev:    "3-xxxxxxx",
+        Rev:    "1-xxxxxxx",
         Foo:    "bar",
 }
 
 myDoc2 := Doc{
         Id:     "doc2",
+        Rev:    "2-xxxxxxx",
+        Foo:    "bar",
+}
+
+myDoc3 := Doc{
+        Id:     "doc3",
         Rev:    "3-xxxxxxx",
         Foo:    "bar",
 }
 
-uploader := db.Bulk(50, 5) // new uploader using batch size 50, concurrency 5
+uploader := db.Bulk(50) // new uploader using batch size 50
 
-uploader.Upload(myDoc1)
+uploader.FireAndForget(myDoc1)
 
 upload.Flush() // uploads all received documents
 
-uploader.Upload(myDoc2)
+r2 := uploader.UploadNow(myDoc2) // uploaded as soon as it's received by a worker
+
+r2.Wait()
+if r2.Error != nil {
+    fmt.Println(r2.Response.Id, r2.Response.Rev) // prints new document '_id' and 'rev'
+}
+
+r3 := uploader.Upload(myDoc3) // queues until the worker creates a full batch of 50 documents
 
 upload.Stop() // uploads any queued documents before stopping
+
+r3.Wait()
+if r3.Error != nil {
+    fmt.Println(r3.Response.Id, r3.Response.Rev) // prints new document '_id' and 'rev'
+}
 ```
 
 ### Using `/_all_docs`:

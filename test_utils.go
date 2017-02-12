@@ -16,6 +16,7 @@ var testPassword string = "pa$$w0rd01"
 var testDatabaseName string = "test-database-1"
 
 type TestDocument struct {
+	Id  string `json:"_id"`
 	Foo string `json:"foo"`
 	Bar int    `json:"bar"`
 }
