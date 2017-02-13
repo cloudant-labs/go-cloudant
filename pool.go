@@ -1,6 +1,7 @@
 package cloudant
 
 import (
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -66,6 +67,10 @@ var workerFunc func(worker *worker, job *Job) // func executed by workers
 // Generates a random int within the range [min, max]
 func random(min, max int) int { return rand.Intn(max-min) + min }
 
+type CredentialsExpiredResponse struct {
+	Error string `json:"error"`
+}
+
 func (w *worker) start() {
 	if workerFunc == nil {
 		workerFunc = func(worker *worker, job *Job) {
@@ -73,8 +78,36 @@ func (w *worker) start() {
 				job.request.URL.String())
 			resp, err := worker.client.httpClient.Do(job.request)
 
-			if err != nil || resp.StatusCode == 429 || resp.StatusCode >= 500 {
+			var retry bool
+			if err != nil {
+				LogFunc("failed to submit request, %s", err)
+				retry = true
+			} else {
+				switch resp.StatusCode {
+				case 401:
+					LogFunc("renewing session")
+					w.client.LogIn()
+					retry = true
+				case 403:
+					response := &CredentialsExpiredResponse{}
+					err = json.NewDecoder(resp.Body).Decode(response)
 
+					retry = false
+					if err == nil && response.Error == "credentials_expired" {
+						LogFunc("renewing session")
+						w.client.LogIn()
+						retry = true
+					}
+				case 429:
+					retry = true
+				case 500, 501, 502, 503, 504:
+					retry = true
+				default:
+					retry = false
+				}
+			}
+
+			if retry {
 				if job.retryCount < w.client.retryCountMax {
 					job.retryCount += 1
 
