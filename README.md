@@ -16,11 +16,27 @@ go get github.com/smithsz/go-cloudant
 ## Supported Features
 - Session authentication
 - Keep-Alive & Connection Pooling
+- Configurable request retrying
 - Hard limit on request concurrency
 - Stream `/_all_docs` & `/_changes`
-- Manages `_bulk_docs` uploads
+- Manage `_bulk_docs` uploads
 
 ## Getting Started
+
+### Creating a Cloudant client:
+```go
+// create a Cloudant client (max. request concurrency 5) with default retry configuration:
+//   - maximum retries per request:     3
+//   - random retry delay minimum:      5  seconds
+//   - random retry delay maximum:      30 seconds
+client1, err1 := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
+
+// create a Cloudant client (max. request concurrency 20) with _custom_ retry configuration:
+//   - maximum retries per request:     5
+//   - random retry delay minimum:      10  seconds
+//   - random retry delay maximum:      60 seconds
+client2, err2 := cloudant.CreateClientWithRetry("user123", "pa55w0rd01", "https://user123.cloudant.com", 20, 5, 10, 60)
+```
 
 ### `Get` a document:
 ```go
