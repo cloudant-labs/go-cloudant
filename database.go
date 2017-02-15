@@ -12,6 +12,8 @@ import (
 	"strings"
 )
 
+var BulkUploadBuffer = 1000 // buffer for bulk upload channel
+
 type AllQuery struct {
 	Limit    int
 	StartKey string
@@ -140,7 +142,7 @@ func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
 
 // Bulk returns a new bulk document uploader.
 func (d *Database) Bulk(batchSize int) *Uploader {
-	return newUploader(d, batchSize, d.client.workerCount)
+	return newUploader(d, batchSize, BulkUploadBuffer)
 }
 
 // Changes returns a channel in which Change types can be received.

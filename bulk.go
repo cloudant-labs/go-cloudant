@@ -91,13 +91,13 @@ type Uploader struct {
 	workers     []*bulkWorker
 }
 
-func newUploader(database *Database, batchSize, concurrency int) *Uploader {
+func newUploader(database *Database, batchSize, buffer int) *Uploader {
 	uploader := Uploader{
-		concurrency: concurrency,
+		concurrency: database.client.workerCount,
 		batchSize:   batchSize,
 		database:    database,
-		uploadChan:  make(chan BulkJobI, 100),
-		workerChan:  make(chan chan BulkJobI, concurrency),
+		uploadChan:  make(chan BulkJobI, buffer),
+		workerChan:  make(chan chan BulkJobI, database.client.workerCount),
 		workers:     make([]*bulkWorker, 0),
 	}
 
