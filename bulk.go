@@ -19,6 +19,13 @@ type BulkDocsResponse struct {
 	Rev    string `json:"rev,omitempty"`
 }
 
+type BulkJobI interface {
+	getDoc() interface{}
+	isPriority() bool
+	done()
+	Wait()
+}
+
 type BulkJob struct {
 	checkResult bool
 	doc         interface{}
@@ -26,29 +33,6 @@ type BulkJob struct {
 	isDone      chan bool
 	priority    bool
 	Response    *BulkDocsResponse
-}
-
-// Mark job as done.
-func (j *BulkJob) done() { j.isDone <- true }
-
-// Block while the job is being executed.
-func (j *BulkJob) Wait() { <-j.isDone }
-
-type bulkWorker struct {
-	id        int
-	flushChan chan *BulkJob
-	jobChan   chan *BulkJob
-	quitChan  chan *BulkJob
-	uploader  *Uploader
-}
-
-type Uploader struct {
-	concurrency int
-	batchSize   int
-	database    *Database
-	uploadChan  chan *BulkJob
-	workerChan  chan chan *BulkJob
-	workers     []*bulkWorker
 }
 
 func newBulkJob(doc interface{}, priority, checkResult bool) *BulkJob {
@@ -61,31 +45,65 @@ func newBulkJob(doc interface{}, priority, checkResult bool) *BulkJob {
 	}
 }
 
+func doneAllJobs(jobs []*BulkJob) {
+	for _, j := range jobs {
+		j.done()
+	}
+}
+
+func errorAllJobs(jobs []*BulkJob, errMessage string) {
+	for _, j := range jobs {
+		j.Error = fmt.Errorf(errMessage)
+	}
+}
+
+func (j *BulkJob) getDoc() interface{} { return j.doc }
+func (j *BulkJob) isPriority() bool    { return j.priority }
+func (j *BulkJob) done()               { j.isDone <- true }
+
+// Block while the job is being executed.
+func (j *BulkJob) Wait() { <-j.isDone }
+
+type bulkJobFlush struct {
+	isDone chan bool
+}
+
+func (j *bulkJobFlush) getDoc() interface{} { return nil }
+func (j *bulkJobFlush) isPriority() bool    { return false }
+func (j *bulkJobFlush) done()               { j.isDone <- true }
+func (j *bulkJobFlush) Wait()               { <-j.isDone }
+
+type bulkJobStop struct {
+	isDone chan bool
+}
+
+func (j *bulkJobStop) getDoc() interface{} { return nil }
+func (j *bulkJobStop) isPriority() bool    { return false }
+func (j *bulkJobStop) done()               { j.isDone <- true }
+func (j *bulkJobStop) Wait()               { <-j.isDone }
+
+type Uploader struct {
+	concurrency int
+	batchSize   int
+	database    *Database
+	uploadChan  chan BulkJobI
+	workerChan  chan chan BulkJobI
+	workers     []*bulkWorker
+}
+
 func newUploader(database *Database, batchSize, concurrency int) *Uploader {
 	uploader := Uploader{
 		concurrency: concurrency,
 		batchSize:   batchSize,
 		database:    database,
-		uploadChan:  make(chan *BulkJob, 100),
-		workerChan:  make(chan chan *BulkJob, concurrency),
+		uploadChan:  make(chan BulkJobI, 100),
+		workerChan:  make(chan chan BulkJobI, concurrency),
 		workers:     make([]*bulkWorker, 0),
 	}
 
 	uploader.start() // start workers
 
 	return &uploader
-}
-
-func newBulkWorker(id int, uploader *Uploader) *bulkWorker {
-	worker := &bulkWorker{
-		id:        id,
-		flushChan: make(chan *BulkJob),
-		jobChan:   make(chan *BulkJob, 100),
-		quitChan:  make(chan *BulkJob),
-		uploader:  uploader,
-	}
-
-	return worker
 }
 
 // Flush uploads all received documents.
@@ -110,10 +128,8 @@ func (u *Uploader) start() {
 		for {
 			select {
 			case job := <-u.uploadChan:
-				go func() {
-					worker := <-u.workerChan
-					worker <- job
-				}()
+				worker := <-u.workerChan
+				worker <- job
 			}
 		}
 	}()
@@ -121,23 +137,28 @@ func (u *Uploader) start() {
 
 // Stop uploads all received documents and then terminates the upload worker(s)
 func (u *Uploader) Stop() {
-	for _, worker := range u.workers {
-		job := worker.stop()
+	jobs := []*bulkJobStop{}
+	for i := 0; i < len(u.workers); i++ {
+		job := &bulkJobStop{isDone: make(chan bool, 1)}
+		go func() { u.uploadChan <- job }()
+		jobs = append(jobs, job)
+	}
+
+	for _, job := range jobs {
 		job.Wait()
 	}
 }
 
 // FireAndForget adds a document to the upload queue ready for processing by the upload worker(s).
 func (u *Uploader) FireAndForget(doc interface{}) {
-	job := newBulkJob(doc, false, false)
-	go func() { u.uploadChan <- job }()
+	u.uploadChan <- newBulkJob(doc, false, false)
 }
 
 // Upload adds a document to the upload queue ready for processing by the upload worker(s). A
 // BulkJob type is returned to the client so that progress can be monitored.
 func (u *Uploader) Upload(doc interface{}) *BulkJob {
 	job := newBulkJob(doc, false, true)
-	go func() { u.uploadChan <- job }()
+	u.uploadChan <- job
 
 	return job
 }
@@ -148,14 +169,30 @@ func (u *Uploader) Upload(doc interface{}) *BulkJob {
 // monitored.
 func (u *Uploader) UploadNow(doc interface{}) *BulkJob {
 	job := newBulkJob(doc, true, true)
-	go func() { u.uploadChan <- job }()
+	u.uploadChan <- job
 
 	return job
 }
 
-func (w *bulkWorker) flush() *BulkJob {
-	job := newBulkJob(nil, false, false)
-	go func() { w.flushChan <- job }()
+type bulkWorker struct {
+	id       int
+	jobChan  chan BulkJobI
+	uploader *Uploader
+}
+
+func newBulkWorker(id int, uploader *Uploader) *bulkWorker {
+	worker := &bulkWorker{
+		id:       id,
+		jobChan:  make(chan BulkJobI, 100),
+		uploader: uploader,
+	}
+
+	return worker
+}
+
+func (w *bulkWorker) flush() *bulkJobFlush {
+	job := &bulkJobFlush{isDone: make(chan bool, 1)}
+	go func() { w.jobChan <- job }()
 
 	return job
 }
@@ -165,35 +202,27 @@ func (w *bulkWorker) start() {
 		bulkDocs := &BulkDocsRequest{Docs: make([]interface{}, 0)}
 		liveJobs := make([]*BulkJob, 0)
 
-		moreWork := true
-
 		for {
-			if moreWork {
-				w.uploader.workerChan <- w.jobChan
-			}
+			w.uploader.workerChan <- w.jobChan
 
-			select {
-			case job := <-w.jobChan:
-				bulkDocs.Docs = append(bulkDocs.Docs, job.doc)
-				liveJobs = append(liveJobs, job)
+			job := <-w.jobChan
 
-				if job.priority || len(bulkDocs.Docs) >= w.uploader.batchSize {
+			switch t := job.(type) {
+			case *BulkJob:
+				bulkDocs.Docs = append(bulkDocs.Docs, job.getDoc())
+				liveJobs = append(liveJobs, t)
+
+				if job.isPriority() || len(bulkDocs.Docs) >= w.uploader.batchSize {
 					processJobs(liveJobs, bulkDocs, w.uploader)
 					liveJobs = liveJobs[:0] // clear jobs
 				}
-
-				moreWork = true
-
-			case job := <-w.flushChan:
+			case *bulkJobFlush:
 				if len(bulkDocs.Docs) > 0 {
 					processJobs(liveJobs, bulkDocs, w.uploader)
 					liveJobs = liveJobs[:0] // clear jobs
 				}
 				job.done()
-
-				moreWork = false
-
-			case job := <-w.quitChan:
+			case *bulkJobStop:
 				if len(bulkDocs.Docs) > 0 {
 					processJobs(liveJobs, bulkDocs, w.uploader)
 				}
@@ -203,13 +232,6 @@ func (w *bulkWorker) start() {
 			}
 		}
 	}()
-}
-
-func (w *bulkWorker) stop() *BulkJob {
-	job := newBulkJob(nil, false, false)
-	go func() { w.quitChan <- job }()
-
-	return job
 }
 
 func processJobs(jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
@@ -273,18 +295,6 @@ func processResult(jobs []*BulkJob, result *Job, err error) {
 				break
 			}
 		}
-	}
-}
-
-func doneAllJobs(jobs []*BulkJob) {
-	for _, j := range jobs {
-		j.done()
-	}
-}
-
-func errorAllJobs(jobs []*BulkJob, errMessage string) {
-	for _, j := range jobs {
-		j.Error = fmt.Errorf(errMessage)
 	}
 }
 
