@@ -10,7 +10,7 @@ A [Cloudant](https://cloudant.com/) library for Golang.
 
 ## Installation
 ```bash
-go get github.com/smithsz/go-cloudant
+go get github.ibm.com/cloudant/go-cloudant
 ```
 
 ## Supported Features
