@@ -257,6 +257,13 @@ func processResult(jobs []*BulkJob, result *Job, err error) {
 		return
 	}
 
+	if result.response == nil {
+		errMsg := "bulk upload error, no response from server"
+		LogFunc(errMsg)
+		errorAllJobs(jobs, errMsg)
+		return
+	}
+
 	if result.response.StatusCode != 201 && result.response.StatusCode != 202 {
 		errMsg := fmt.Sprintf("failed to upload bulk documents, status %d",
 			result.response.StatusCode)
