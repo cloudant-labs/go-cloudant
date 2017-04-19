@@ -27,21 +27,19 @@ type BulkJobI interface {
 }
 
 type BulkJob struct {
-	checkResult bool
-	doc         interface{}
-	Error       error
-	isDone      chan bool
-	priority    bool
-	Response    *BulkDocsResponse
+	doc      interface{}
+	Error    error
+	isDone   chan bool
+	priority bool
+	Response *BulkDocsResponse
 }
 
-func newBulkJob(doc interface{}, priority, checkResult bool) *BulkJob {
+func newBulkJob(doc interface{}, priority bool) *BulkJob {
 	return &BulkJob{
-		checkResult: checkResult,
-		doc:         doc,
-		Error:       nil,
-		isDone:      make(chan bool, 1),
-		priority:    priority,
+		doc:      doc,
+		Error:    nil,
+		isDone:   make(chan bool, 1),
+		priority: priority,
 	}
 }
 
@@ -151,13 +149,13 @@ func (u *Uploader) Stop() {
 
 // FireAndForget adds a document to the upload queue ready for processing by the upload worker(s).
 func (u *Uploader) FireAndForget(doc interface{}) {
-	u.uploadChan <- newBulkJob(doc, false, false)
+	u.uploadChan <- newBulkJob(doc, false)
 }
 
 // Upload adds a document to the upload queue ready for processing by the upload worker(s). A
 // BulkJob type is returned to the client so that progress can be monitored.
 func (u *Uploader) Upload(doc interface{}) *BulkJob {
-	job := newBulkJob(doc, false, true)
+	job := newBulkJob(doc, false)
 	u.uploadChan <- job
 
 	return job
@@ -168,7 +166,7 @@ func (u *Uploader) Upload(doc interface{}) *BulkJob {
 // the current batch size). A BulkJob type is returned to the client so that progress can be
 // monitored.
 func (u *Uploader) UploadNow(doc interface{}) *BulkJob {
-	job := newBulkJob(doc, true, true)
+	job := newBulkJob(doc, true)
 	u.uploadChan <- job
 
 	return job
@@ -282,25 +280,15 @@ func processResult(jobs []*BulkJob, result *Job, err error) {
 		return
 	}
 
-	for _, job := range jobs {
-		if !job.checkResult {
-			continue
-		}
+	if len(jobs) != len(responses) {
+		LogFunc("unexpected response count: %d, expected: %d", len(responses), len(jobs))
+		return
+	}
 
-		docId, ok := getByFieldName(job.doc, "Id")
-		if !ok {
-			break
-		}
-
-		for _, response := range responses {
-			if docId == response.Id {
-				job.Response = &response
-				if response.Error != "" {
-					job.Error = fmt.Errorf("%s - %s", response.Error,
-						response.Reason)
-				}
-				break
-			}
+	for i, job := range jobs {
+		job.Response = &responses[i]
+		if job.Response.Error != "" {
+			job.Error = fmt.Errorf("%s - %s", job.Response.Error, job.Response.Reason)
 		}
 	}
 }
