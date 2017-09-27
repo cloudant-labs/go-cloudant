@@ -130,9 +130,8 @@ func (c *CouchClient) Exists(databaseName string) (bool, error) {
 	return job.response.StatusCode == 200, nil
 }
 
-// GetOrCreate returns a database.
-// If the database doesn't exist on the server then it will be created.
-func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
+// Get returns a database. It is assumed to exist.
+func (c *CouchClient) Get(databaseName string) (*Database, error) {
 	databaseURL, err := url.Parse(c.rootURL.String())
 	if err != nil {
 		return nil, err
@@ -140,7 +139,24 @@ func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
 
 	databaseURL.Path += "/" + databaseName
 
-	job, err := c.request("PUT", databaseURL.String(), nil)
+	database := &Database{
+		client: c,
+		Name:   databaseName,
+		URL:    databaseURL,
+	}
+
+	return database, nil
+}
+
+// GetOrCreate returns a database.
+// If the database doesn't exist on the server then it will be created.
+func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
+	database, err := c.Get(databaseName)
+	if err != nil {
+		return nil, err
+	}
+
+	job, err := c.request("PUT", database.URL.String(), nil)
 	defer job.Close()
 
 	if err != nil {
@@ -154,12 +170,6 @@ func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
 	if job.response.StatusCode != 201 && job.response.StatusCode != 412 {
 		return nil, fmt.Errorf(
 			"failed to create database, status %d", job.response.StatusCode)
-	}
-
-	database := &Database{
-		client: c,
-		Name:   databaseName,
-		URL:    databaseURL,
 	}
 
 	return database, nil
