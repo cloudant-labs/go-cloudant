@@ -138,7 +138,7 @@ func TestDatabase_Changes(t *testing.T) {
 
 	setupMocks([]*http.Response{mockChangesResponse})
 
-	changes, err := database.Changes()
+	changes, err := database.Changes(nil)
 	if err != nil {
 		t.Error(err)
 	}
