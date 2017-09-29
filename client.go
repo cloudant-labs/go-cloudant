@@ -39,6 +39,25 @@ type CouchClient struct {
 	workerCount   int
 }
 
+// QueryBuilder is used by functions implementing Cloudant API calls
+// that have many optional parameters
+type QueryBuilder interface {
+	QueryString() (url.Values, error)
+}
+
+// Endpoint is a convenience function to build url-strings
+func Endpoint(base url.URL, pathStr string, params QueryBuilder) (string, error) {
+	base.Path = path.Join(base.Path, pathStr)
+	if params != nil {
+		query, err := params.QueryString()
+		if err != nil {
+			return "", err
+		}
+		base.RawQuery = query.Encode()
+	}
+	return base.String(), nil
+}
+
 // CreateClient returns a new client (with max. retry 3 using a random 5-30 secs delay).
 func CreateClient(username, password, rootStrURL string, concurrency int) (*CouchClient, error) {
 	return CreateClientWithRetry(username, password, rootStrURL, concurrency, 3, 5, 30)

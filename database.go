@@ -33,12 +33,14 @@ type Change struct {
 	Id  string
 	Rev string
 	Seq string
+	Doc interface{} // Only present if Changes() called with include_docs=true
 }
 
 type ChangeRow struct {
 	Id      string             `json:"id"`
 	Seq     string             `json:"seq"`
 	Changes []ChangeRowChanges `json:"changes"`
+	Doc     interface{}        `json:"doc"`
 }
 
 type ChangeRowChanges struct {
@@ -146,8 +148,14 @@ func (d *Database) Bulk(batchSize int) *Uploader {
 }
 
 // Changes returns a channel in which Change types can be received.
-func (d *Database) Changes() (<-chan *Change, error) {
-	req, err := http.NewRequest("GET", d.URL.String()+"/_changes", nil)
+func (d *Database) Changes(args QueryBuilder) (<-chan *Change, error) {
+
+	urlStr, err := Endpoint(*d.URL, "/_changes", args)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", urlStr, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +197,7 @@ func (d *Database) Changes() (<-chan *Change, error) {
 						Id:  change.Id,
 						Rev: change.Changes[0].Rev,
 						Seq: change.Seq,
+						Doc: change.Doc,
 					}
 				} else {
 					fmt.Println(err)

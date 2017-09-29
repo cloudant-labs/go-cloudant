@@ -162,14 +162,20 @@ for{
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
 db, err := client.GetOrCreate("my_database")
 
-changes, err := db.Changes()
+query := cloudant.NewChangesQuery().IncludeDocs().Build()
 
-for{
+changes, err := db.Changes(query)
+
+for {
     change, more := <-changes
-	if more {
-	    fmt.Println(doc.Seq, doc.Id, doc.Rev)  // prints change 'seq', 'id' and 'rev'
-	} else {
-	    break
-	}
+    if more {
+        fmt.Println(change.Seq, change.Id, change.Rev)  // prints change 'seq', 'id' and 'rev'
+
+        // Doc body
+        str, _ := json.MarshalIndent(change.Doc, "", "  ")
+        fmt.Printf("%s\n", str)
+    } else {
+        break
+    }
 }
 ```
