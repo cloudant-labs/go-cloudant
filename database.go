@@ -33,7 +33,7 @@ type Change struct {
 	Id  string
 	Rev string
 	Seq string
-	Doc interface{}
+	Doc interface{} // Only present if Changes() called with include_docs=true
 }
 
 type ChangeRow struct {

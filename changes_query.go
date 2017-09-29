@@ -1,10 +1,18 @@
 package cloudant
 
+// QueryBuilder implementation for the Changes() API call.
+//
+// Example:
+// 	query := cloudant.NewChangesQuery().IncludeDocs().Build()
+//
+//	changes, err := db.Changes(query)
+
 import (
 	"net/url"
 	"strconv"
 )
 
+// ChangesQueryBuilder defines the available parameter-setting functions.
 type ChangesQueryBuilder interface {
 	Conflicts()			ChangesQueryBuilder
 	Descending() 		ChangesQueryBuilder
@@ -32,6 +40,8 @@ type changesQueryBuilder struct {
 	timeout			int
 }
 
+// changesQuery holds the implemented API call parameters. The doc_ids parameter
+// is not yet implemented.
 type changesQuery struct {
 	conflicts		bool
 	descending		bool
@@ -99,6 +109,8 @@ func (c *changesQueryBuilder) Timeout(secs int) ChangesQueryBuilder {
 	return c
 }
 
+// QueryString implements the QueryBuilder interface. It returns an
+// url.Values map with the non-default values set.
 func (cq *changesQuery) QueryString() (url.Values, error) {
 	vals := url.Values{}
 	if cq.conflicts {
