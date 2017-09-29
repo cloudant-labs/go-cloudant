@@ -36,21 +36,21 @@ func TestDatabase_All(t *testing.T) {
 
 	setupMocks([]*http.Response{mockAllDocsResponse})
 
-	docs, err := database.All()
+	rows, err := database.All(nil)
 	if err != nil {
 		t.Error(err)
 	}
 
 	i := 0
 	for {
-		doc, more := <-docs
+		row, more := <-rows
 		if more {
-			i += 1
-			if fmt.Sprintf("doc%d", i) != doc.Id {
-				t.Errorf("unexpected doc id %s", doc.Id)
+			i++
+			if fmt.Sprintf("doc%d", i) != row.ID {
+				t.Errorf("unexpected doc id %s", row.ID)
 			}
-			if fmt.Sprintf("%d-967a00dff5e02add41819138abb3284d", i) != doc.Rev {
-				t.Errorf("unexpected rev value %s", doc.Rev)
+			if fmt.Sprintf("%d-967a00dff5e02add41819138abb3284d", i) != row.Value.Rev {
+				t.Errorf("unexpected rev value %s", row.Value.Rev)
 			}
 		} else {
 			break
@@ -80,11 +80,13 @@ func TestDatabase_AllQ(t *testing.T) {
 
 	setupMocks([]*http.Response{mock200})
 
-	docs, err := database.AllQ(&AllQuery{
-		Limit:    123,
-		StartKey: "foo1",
-		EndKey:   "foo2",
-	})
+	query := NewAllDocsQuery().
+		Limit(123).
+		StartKey("foo1").
+		EndKey("foo2").
+		Build()
+
+	docs, err := database.All(query)
 	if err != nil {
 		t.Error(err)
 	}
@@ -93,7 +95,7 @@ func TestDatabase_AllQ(t *testing.T) {
 	for {
 		_, more := <-docs
 		if more {
-			i += 1
+			i++
 		} else {
 			break
 		}
@@ -147,9 +149,9 @@ func TestDatabase_Changes(t *testing.T) {
 	for {
 		change, more := <-changes
 		if more {
-			i += 1
-			if fmt.Sprintf("doc%d", i) != change.Id {
-				t.Errorf("unexpected change id %s", change.Id)
+			i++
+			if fmt.Sprintf("doc%d", i) != change.ID {
+				t.Errorf("unexpected change id %s", change.ID)
 			}
 			if fmt.Sprintf("%d-xxxxx", i) != change.Seq {
 				t.Errorf("unexpected change seq %s", change.Seq)
