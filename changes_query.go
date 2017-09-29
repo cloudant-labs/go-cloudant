@@ -14,47 +14,48 @@ import (
 
 // ChangesQueryBuilder defines the available parameter-setting functions.
 type ChangesQueryBuilder interface {
-	Conflicts()			ChangesQueryBuilder
-	Descending() 		ChangesQueryBuilder
-	Feed(string) 		ChangesQueryBuilder
-	Filter(string) 		ChangesQueryBuilder
-	Heartbeat(int)		ChangesQueryBuilder
-	IncludeDocs()		ChangesQueryBuilder
-	Limit(int)			ChangesQueryBuilder
-	Since(string)		ChangesQueryBuilder
-	Style(string)		ChangesQueryBuilder
-	Timeout(int)		ChangesQueryBuilder
-	Build()				QueryBuilder
+	Conflicts() ChangesQueryBuilder
+	Descending() ChangesQueryBuilder
+	Feed(string) ChangesQueryBuilder
+	Filter(string) ChangesQueryBuilder
+	Heartbeat(int) ChangesQueryBuilder
+	IncludeDocs() ChangesQueryBuilder
+	Limit(int) ChangesQueryBuilder
+	Since(string) ChangesQueryBuilder
+	Style(string) ChangesQueryBuilder
+	Timeout(int) ChangesQueryBuilder
+	Build() QueryBuilder
 }
 
 type changesQueryBuilder struct {
-	conflicts		bool
-	descending		bool
-	feed 			string
-	filter 			string
-	heartbeat		int
-	include_docs	bool
-	limit			int
-	since			string
-	style			string
-	timeout			int
+	conflicts   bool
+	descending  bool
+	feed        string
+	filter      string
+	heartbeat   int
+	includeDocs bool
+	limit       int
+	since       string
+	style       string
+	timeout     int
 }
 
 // changesQuery holds the implemented API call parameters. The doc_ids parameter
 // is not yet implemented.
 type changesQuery struct {
-	conflicts		bool
-	descending		bool
-	feed 			string
-	filter 			string
-	heartbeat		int
-	include_docs	bool
-	limit			int
-	since			string
-	style			string
-	timeout			int
+	conflicts   bool
+	descending  bool
+	feed        string
+	filter      string
+	heartbeat   int
+	includeDocs bool
+	limit       int
+	since       string
+	style       string
+	timeout     int
 }
 
+// NewChangesQuery is the entry point.
 func NewChangesQuery() ChangesQueryBuilder {
 	return &changesQueryBuilder{}
 }
@@ -85,7 +86,7 @@ func (c *changesQueryBuilder) Heartbeat(hb int) ChangesQueryBuilder {
 }
 
 func (c *changesQueryBuilder) IncludeDocs() ChangesQueryBuilder {
-	c.include_docs = true
+	c.includeDocs = true
 	return c
 }
 
@@ -119,7 +120,7 @@ func (cq *changesQuery) QueryString() (url.Values, error) {
 	if cq.descending {
 		vals.Set("descending", "true")
 	}
-	if cq.include_docs {
+	if cq.includeDocs {
 		vals.Set("include_docs", "true")
 	}
 	if cq.feed != "" {
@@ -145,15 +146,15 @@ func (cq *changesQuery) QueryString() (url.Values, error) {
 
 func (c *changesQueryBuilder) Build() QueryBuilder {
 	return &changesQuery{
-		conflicts:		c.conflicts,
-		descending:		c.descending,
-		feed: 			c.feed,
-		filter: 		c.filter,
-		heartbeat:		c.heartbeat,
-		include_docs:	c.include_docs,
-		limit:			c.limit,
-		since:			c.since,
-		style:			c.style,
-		timeout:		c.timeout,
+		conflicts:   c.conflicts,
+		descending:  c.descending,
+		feed:        c.feed,
+		filter:      c.filter,
+		heartbeat:   c.heartbeat,
+		includeDocs: c.includeDocs,
+		limit:       c.limit,
+		since:       c.since,
+		style:       c.style,
+		timeout:     c.timeout,
 	}
 }
