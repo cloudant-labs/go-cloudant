@@ -8,56 +8,59 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 )
 
-var BulkUploadBuffer = 1000 // buffer for bulk upload channel
+var bulkUploadBuffer = 1000 // buffer for bulk upload channel
 
-type AllQuery struct {
-	Limit    int
-	StartKey string
-	EndKey   string
-}
-
+// AllRow represents a row in the json array returned by all_docs
 type AllRow struct {
-	Id    string      `json:"id"`
+	ID    string      `json:"id"`
 	Value AllRowValue `json:"value"`
+	Doc   interface{} `json:"doc"`
 }
 
+// AllRowValue represents a part returned by _all_docs
 type AllRowValue struct {
 	Rev string `json:"rev"`
 }
 
+// Change represents a part returned by _changes
 type Change struct {
-	Id  string
+	ID  string
 	Rev string
 	Seq string
 	Doc interface{} // Only present if Changes() called with include_docs=true
 }
 
+// ChangeRow represents a part returned by _changes
 type ChangeRow struct {
-	Id      string             `json:"id"`
+	ID      string             `json:"id"`
 	Seq     string             `json:"seq"`
 	Changes []ChangeRowChanges `json:"changes"`
 	Doc     interface{}        `json:"doc"`
 }
 
+// ChangeRowChanges represents a part returned by _changes
 type ChangeRowChanges struct {
 	Rev string `json:"rev"`
 }
 
+// Database holds a reference to an authenticated client connection and the
+// name of a remote database
 type Database struct {
 	client *CouchClient
 	Name   string
 	URL    *url.URL
 }
 
+// DocumentMeta is a CouchDB id/rev pair
 type DocumentMeta struct {
-	Id  string `json:"id"`
+	ID  string `json:"id"`
 	Rev string `json:"rev"`
 }
 
+// Info represents the account meta-data
 type Info struct {
 	IsCompactRunning bool   `json:"compact_running"`
 	DataSize         int    `json:"data_size"`
@@ -67,35 +70,15 @@ type Info struct {
 	UpdateSeq        string `json:"update_seq"`
 }
 
-// All returns a channel in which AllDocRow types can be received.
-func (d *Database) All() (<-chan *DocumentMeta, error) {
-	return d.AllQ(&AllQuery{})
-}
+// All returns a channel in which AllRow types can be received.
+func (d *Database) All(args QueryBuilder) (<-chan *AllRow, error) {
 
-// AllQ returns a channel in which AllDocRow types can be received.
-// The query definition is passed as type AllDocsQuery.
-func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
-	allDocsURL, err := url.Parse(d.URL.String())
+	urlStr, err := Endpoint(*d.URL, "/_all_docs", args)
 	if err != nil {
 		return nil, err
 	}
 
-	allDocsURL.Path = path.Join(allDocsURL.Path, "_all_docs")
-
-	q := allDocsURL.Query()
-	if query.Limit > 0 {
-		q.Add("limit", strconv.Itoa(query.Limit))
-	}
-	if query.StartKey != "" {
-		q.Add("startkey", query.StartKey)
-	}
-	if query.EndKey != "" {
-		q.Add("endkey", query.EndKey)
-	}
-
-	allDocsURL.RawQuery = q.Encode()
-
-	req, err := http.NewRequest("GET", allDocsURL.String(), nil)
+	req, err := http.NewRequest("GET", urlStr, nil)
 
 	job := CreateJob(req)
 	d.client.Execute(job)
@@ -108,9 +91,9 @@ func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
 			job.response.StatusCode)
 	}
 
-	results := make(chan *DocumentMeta, 1000)
+	results := make(chan *AllRow, 1000)
 
-	go func(job *Job, results chan<- *DocumentMeta) {
+	go func(job *Job, results chan<- *AllRow) {
 		defer job.Close()
 
 		reader := bufio.NewReader(job.response.Body)
@@ -130,10 +113,7 @@ func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
 
 				err := json.Unmarshal([]byte(lineStr), result)
 				if err == nil {
-					results <- &DocumentMeta{
-						Id:  result.Id,
-						Rev: result.Value.Rev,
-					}
+					results <- result
 				}
 			}
 		}
@@ -144,7 +124,7 @@ func (d *Database) AllQ(query *AllQuery) (<-chan *DocumentMeta, error) {
 
 // Bulk returns a new bulk document uploader.
 func (d *Database) Bulk(batchSize int) *Uploader {
-	return newUploader(d, batchSize, BulkUploadBuffer)
+	return newUploader(d, batchSize, bulkUploadBuffer)
 }
 
 // Changes returns a channel in which Change types can be received.
@@ -194,7 +174,7 @@ func (d *Database) Changes(args QueryBuilder) (<-chan *Change, error) {
 				err := json.Unmarshal([]byte(lineStr), change)
 				if err == nil && len(change.Changes) == 1 {
 					changes <- &Change{
-						Id:  change.Id,
+						ID:  change.ID,
 						Rev: change.Changes[0].Rev,
 						Seq: change.Seq,
 						Doc: change.Doc,
@@ -229,18 +209,18 @@ func (d *Database) Info() (info *Info, err error) {
 
 // Get a document from the database.
 // No need to specific a '_rev' as the latest revision is always returned.
-func (d *Database) Get(documentId string, target interface{}) error {
-	return d.GetWithRev(documentId, "", target)
+func (d *Database) Get(documentID string, target interface{}) error {
+	return d.GetWithRev(documentID, "", target)
 }
 
-// Get a document with a specified revision.
-func (d *Database) GetWithRev(documentId, rev string, target interface{}) error {
+// GetWithRev fetches a document with a specified revision.
+func (d *Database) GetWithRev(documentID, rev string, target interface{}) error {
 	docURL, err := url.Parse(d.URL.String())
 	if err != nil {
 		return err
 	}
 
-	docURL.Path = path.Join(docURL.Path, documentId)
+	docURL.Path = path.Join(docURL.Path, documentID)
 
 	if rev != "" {
 		q := docURL.Query()
@@ -259,13 +239,13 @@ func (d *Database) GetWithRev(documentId, rev string, target interface{}) error 
 }
 
 // Delete a document with a specified revision.
-func (d *Database) Delete(documentId, rev string) error {
+func (d *Database) Delete(documentID, rev string) error {
 	docURL, err := url.Parse(d.URL.String())
 	if err != nil {
 		return err
 	}
 
-	docURL.Path = path.Join(docURL.Path, documentId)
+	docURL.Path = path.Join(docURL.Path, documentID)
 
 	q := docURL.Query()
 	q.Add("rev", rev) // add 'rev' param
@@ -280,7 +260,7 @@ func (d *Database) Delete(documentId, rev string) error {
 
 	if job.response.StatusCode != 200 {
 		return fmt.Errorf(
-			"failed to delete document %s, status %d", documentId, job.response.StatusCode)
+			"failed to delete document %s, status %d", documentID, job.response.StatusCode)
 	}
 
 	return nil

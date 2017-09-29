@@ -135,21 +135,22 @@ if r3.Error != nil {
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
 db, err := client.GetOrCreate("my_database")
 
-docs, err := db.All()
+rows, err := db.All(nil)
 
 // OR include some query options...
 //
-// q := &cloudant.AllQuery{
-//     Limit:	    123,
-//     StartKey:    "bar",
-//     EndKey:      "foo",
-// }
-// docs, err := db.AllQ(q)
+// q := cloudant.NewAllDocsQuery().
+//		Limit(123).
+//		StartKey("foo1").
+//		EndKey("foo2").
+//		Build()
+//
+//	rows, err := db.All(q)
 
 for{
-    doc, more := <-docs
+    row, more := <-rows
 	if more {
-	    fmt.Println(doc.Id, doc.Rev)  // prints document 'id' and 'rev'
+	    fmt.Println(row.ID, row.Value.Rev)  // prints document 'id' and 'rev'
 	} else {
 	    break
 	}
