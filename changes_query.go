@@ -8,6 +8,7 @@ package cloudant
 //	changes, err := db.Changes(query)
 
 import (
+	"encoding/json"
 	"net/url"
 	"strconv"
 )
@@ -16,25 +17,29 @@ import (
 type ChangesQueryBuilder interface {
 	Conflicts() ChangesQueryBuilder
 	Descending() ChangesQueryBuilder
+	DocIDs([]string) ChangesQueryBuilder
 	Feed(string) ChangesQueryBuilder
 	Filter(string) ChangesQueryBuilder
 	Heartbeat(int) ChangesQueryBuilder
 	IncludeDocs() ChangesQueryBuilder
 	Limit(int) ChangesQueryBuilder
+	SeqInterval(int) ChangesQueryBuilder
 	Since(string) ChangesQueryBuilder
 	Style(string) ChangesQueryBuilder
 	Timeout(int) ChangesQueryBuilder
-	Build() QueryBuilder
+	Build() *changesQuery
 }
 
 type changesQueryBuilder struct {
 	conflicts   bool
 	descending  bool
+	docIDs      []string
 	feed        string
 	filter      string
 	heartbeat   int
 	includeDocs bool
 	limit       int
+	seqInterval int
 	since       string
 	style       string
 	timeout     int
@@ -43,16 +48,18 @@ type changesQueryBuilder struct {
 // changesQuery holds the implemented API call parameters. The doc_ids parameter
 // is not yet implemented.
 type changesQuery struct {
-	conflicts   bool
-	descending  bool
-	feed        string
-	filter      string
-	heartbeat   int
-	includeDocs bool
-	limit       int
-	since       string
-	style       string
-	timeout     int
+	Conflicts   bool
+	Descending  bool
+	DocIDs      []string
+	Feed        string
+	Filter      string
+	Heartbeat   int
+	IncludeDocs bool
+	Limit       int
+	SeqInterval int
+	Since       string
+	Style       string
+	Timeout     int
 }
 
 // NewChangesQuery is the entry point.
@@ -67,6 +74,11 @@ func (c *changesQueryBuilder) Conflicts() ChangesQueryBuilder {
 
 func (c *changesQueryBuilder) Descending() ChangesQueryBuilder {
 	c.descending = true
+	return c
+}
+
+func (c *changesQueryBuilder) DocIDs(docIDs []string) ChangesQueryBuilder {
+	c.docIDs = docIDs
 	return c
 }
 
@@ -95,6 +107,11 @@ func (c *changesQueryBuilder) Limit(lim int) ChangesQueryBuilder {
 	return c
 }
 
+func (c *changesQueryBuilder) SeqInterval(interval int) ChangesQueryBuilder {
+	c.seqInterval = interval
+	return c
+}
+
 func (c *changesQueryBuilder) Since(seq string) ChangesQueryBuilder {
 	c.since = seq
 	return c
@@ -110,51 +127,65 @@ func (c *changesQueryBuilder) Timeout(secs int) ChangesQueryBuilder {
 	return c
 }
 
-// QueryString implements the QueryBuilder interface. It returns an
+// GetQuery implements the QueryBuilder interface. It returns an
 // url.Values map with the non-default values set.
-func (cq *changesQuery) QueryString() (url.Values, error) {
+func (cq *changesQuery) GetQuery() (url.Values, error) {
 	vals := url.Values{}
-	if cq.conflicts {
+	if cq.Conflicts {
 		vals.Set("conflicts", "true")
 	}
-	if cq.descending {
+	if cq.Descending {
 		vals.Set("descending", "true")
 	}
-	if cq.includeDocs {
+	if len(cq.DocIDs) > 0 {
+		data, err := json.Marshal(cq.DocIDs)
+		if err != nil {
+			return nil, err
+		}
+		vals.Set("doc_ids", string(data[:]))
+	}
+	if cq.IncludeDocs {
 		vals.Set("include_docs", "true")
 	}
-	if cq.feed != "" {
-		vals.Set("feed", cq.feed)
+	if cq.Feed != "" {
+		vals.Set("feed", cq.Feed)
 	}
-	if cq.filter != "" {
-		vals.Set("filter", cq.filter)
+	if cq.Filter != "" {
+		vals.Set("filter", cq.Filter)
 	}
-	if cq.heartbeat > 0 {
-		vals.Set("heartbeat", strconv.Itoa(cq.heartbeat))
+	if cq.Heartbeat > 0 {
+		vals.Set("heartbeat", strconv.Itoa(cq.Heartbeat))
 	}
-	if cq.style != "" {
-		vals.Set("style", cq.style)
+	if cq.Limit > 0 {
+		vals.Set("limit", strconv.Itoa(cq.Limit))
 	}
-	if cq.since != "" {
-		vals.Set("since", cq.since)
+	if cq.SeqInterval > 0 {
+		vals.Set("seq_interval", strconv.Itoa(cq.SeqInterval))
 	}
-	if cq.timeout > 0 {
-		vals.Set("timeout", strconv.Itoa(cq.timeout))
+	if cq.Style != "" {
+		vals.Set("style", cq.Style)
+	}
+	if cq.Since != "" {
+		vals.Set("since", cq.Since)
+	}
+	if cq.Timeout > 0 {
+		vals.Set("timeout", strconv.Itoa(cq.Timeout))
 	}
 	return vals, nil
 }
 
-func (c *changesQueryBuilder) Build() QueryBuilder {
+func (c *changesQueryBuilder) Build() *changesQuery {
 	return &changesQuery{
-		conflicts:   c.conflicts,
-		descending:  c.descending,
-		feed:        c.feed,
-		filter:      c.filter,
-		heartbeat:   c.heartbeat,
-		includeDocs: c.includeDocs,
-		limit:       c.limit,
-		since:       c.since,
-		style:       c.style,
-		timeout:     c.timeout,
+		Conflicts:   c.conflicts,
+		Descending:  c.descending,
+		Feed:        c.feed,
+		Filter:      c.filter,
+		Heartbeat:   c.heartbeat,
+		IncludeDocs: c.includeDocs,
+		Limit:       c.limit,
+		SeqInterval: c.seqInterval,
+		Since:       c.since,
+		Style:       c.style,
+		Timeout:     c.timeout,
 	}
 }

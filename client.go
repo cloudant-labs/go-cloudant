@@ -42,19 +42,13 @@ type CouchClient struct {
 // QueryBuilder is used by functions implementing Cloudant API calls
 // that have many optional parameters
 type QueryBuilder interface {
-	QueryString() (url.Values, error)
+	GetQuery() (url.Values, error)
 }
 
 // Endpoint is a convenience function to build url-strings
-func Endpoint(base url.URL, pathStr string, params QueryBuilder) (string, error) {
+func Endpoint(base url.URL, pathStr string, params url.Values) (string, error) {
 	base.Path = path.Join(base.Path, pathStr)
-	if params != nil {
-		query, err := params.QueryString()
-		if err != nil {
-			return "", err
-		}
-		base.RawQuery = query.Encode()
-	}
+	base.RawQuery = params.Encode()
 	return base.String(), nil
 }
 
@@ -232,7 +226,7 @@ func (c *CouchClient) LogOut() {
 func (c *CouchClient) request(method, path string, body io.Reader) (job *Job, err error) {
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	if req.Method == "POST" {
@@ -244,7 +238,11 @@ func (c *CouchClient) request(method, path string, body io.Reader) (job *Job, er
 	c.Execute(job)
 	job.Wait()
 
-	return
+	if job.error != nil {
+		return job, job.error
+	}
+
+	return job, nil
 }
 
 // Execute submits a job for execution.

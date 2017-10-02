@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
-	"path"
 	"strings"
 )
 
@@ -71,24 +69,42 @@ type Info struct {
 }
 
 // All returns a channel in which AllRow types can be received.
-func (d *Database) All(args QueryBuilder) (<-chan *AllRow, error) {
+func (d *Database) All(args *allDocsQuery) (<-chan *AllRow, error) {
+	verb := "GET"
+	var body []byte
+	var err error
+	if len(args.Keys) > 0 {
+		// If we're given a "Keys" argument, we're better off with a POST
+		body, err = json.Marshal(map[string][]string{"keys": args.Keys})
+		if err != nil {
+			return nil, err
+		}
+		verb = "POST"
+		args.Keys = nil
+	}
 
-	urlStr, err := Endpoint(*d.URL, "/_all_docs", args)
+	params, err := args.GetQuery()
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("GET", urlStr, nil)
+	urlStr, err := Endpoint(*d.URL, "/_all_docs", params)
+	if err != nil {
+		return nil, err
+	}
 
-	job := CreateJob(req)
-	d.client.Execute(job)
+	job, err := d.client.request(verb, urlStr, bytes.NewReader(body))
+	if err != nil {
+		if job != nil {
+			job.done() // close the body reader to avoid leakage
+		}
+		return nil, err
+	}
 
-	job.Wait()
-
-	if job.response.StatusCode != 200 {
-		job.done()
-		return nil, fmt.Errorf("failed to get database all docs, status %d",
-			job.response.StatusCode)
+	err = expectedReturnCodes(job, 200)
+	if err != nil {
+		job.done() // close the body reader to avoid leakage
+		return nil, err
 	}
 
 	results := make(chan *AllRow, 1000)
@@ -128,27 +144,40 @@ func (d *Database) Bulk(batchSize int) *Uploader {
 }
 
 // Changes returns a channel in which Change types can be received.
-func (d *Database) Changes(args QueryBuilder) (<-chan *Change, error) {
+// See: https://console.bluemix.net/docs/services/Cloudant/api/database.html#get-changes
+func (d *Database) Changes(args *changesQuery) (<-chan *Change, error) {
+	verb := "GET"
+	var body []byte
+	var err error
+	if len(args.DocIDs) > 0 {
+		// If we're given a "doc_ids" argument, we're better off with a POST
+		body, err = json.Marshal(map[string][]string{"doc_ids": args.DocIDs})
+		if err != nil {
+			return nil, err
+		}
+		verb = "POST"
+		args.DocIDs = nil
+	}
 
-	urlStr, err := Endpoint(*d.URL, "/_changes", args)
+	params, err := args.GetQuery()
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("GET", urlStr, nil)
+	urlStr, err := Endpoint(*d.URL, "/_changes", params)
 	if err != nil {
 		return nil, err
 	}
-
-	job := CreateJob(req)
-	d.client.Execute(job)
-
-	job.Wait()
-
-	if job.response.StatusCode != 200 {
+	job, err := d.client.request(verb, urlStr, bytes.NewReader(body))
+	if err != nil {
 		job.done()
-		return nil, fmt.Errorf("failed to get database changes, status %d",
-			job.response.StatusCode)
+		return nil, err
+	}
+
+	err = expectedReturnCodes(job, 200)
+	if err != nil {
+		job.done()
+		return nil, err
 	}
 
 	changes := make(chan *Change, 1000)
@@ -168,7 +197,7 @@ func (d *Database) Changes(args QueryBuilder) (<-chan *Change, error) {
 			lineStr = strings.TrimSpace(lineStr)      // remove whitespace
 			lineStr = strings.TrimRight(lineStr, ",") // remove trailing comma
 
-			if len(lineStr) > 8 && lineStr[0:8] == "{\"seq\":\"" {
+			if len(lineStr) > 7 && lineStr[0:7] == "{\"seq\":" {
 				var change = new(ChangeRow)
 
 				err := json.Unmarshal([]byte(lineStr), change)
@@ -190,47 +219,44 @@ func (d *Database) Changes(args QueryBuilder) (<-chan *Change, error) {
 }
 
 // Info returns database information.
-// Attributes include document count, update seq, ...
-func (d *Database) Info() (info *Info, err error) {
+// See https://console.bluemix.net/docs/services/Cloudant/api/database.html#getting-database-details
+func (d *Database) Info() (*Info, error) {
 	job, err := d.client.request("GET", d.URL.String(), nil)
 	defer job.Close()
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	if job.response.StatusCode != 200 {
-		err = fmt.Errorf("failed to get database info, status %d", job.response.StatusCode)
+	err = expectedReturnCodes(job, 200)
+	if err != nil {
+		return nil, err
 	}
 
-	err = json.NewDecoder(job.response.Body).Decode(&info)
+	info := &Info{}
+	err = json.NewDecoder(job.response.Body).Decode(info)
 
-	return
+	return info, err
 }
 
 // Get a document from the database.
-// No need to specific a '_rev' as the latest revision is always returned.
-func (d *Database) Get(documentID string, target interface{}) error {
-	return d.GetWithRev(documentID, "", target)
-}
-
-// GetWithRev fetches a document with a specified revision.
-func (d *Database) GetWithRev(documentID, rev string, target interface{}) error {
-	docURL, err := url.Parse(d.URL.String())
+// See: https://console.bluemix.net/docs/services/Cloudant/api/document.html#read
+func (d *Database) Get(documentID string, args *getQuery, target interface{}) error {
+	params, err := args.GetQuery()
+	if err != nil {
+		return err
+	}
+	urlStr, err := Endpoint(*d.URL, documentID, params)
 	if err != nil {
 		return err
 	}
 
-	docURL.Path = path.Join(docURL.Path, documentID)
-
-	if rev != "" {
-		q := docURL.Query()
-		q.Add("rev", rev)
-
-		docURL.RawQuery = q.Encode()
+	job, err := d.client.request("GET", urlStr, nil)
+	defer job.Close()
+	if err != nil {
+		return err
 	}
 
-	job, err := d.client.request("GET", docURL.String(), nil)
-	defer job.Close()
+	err = expectedReturnCodes(job, 200)
 	if err != nil {
 		return err
 	}
@@ -240,30 +266,20 @@ func (d *Database) GetWithRev(documentID, rev string, target interface{}) error 
 
 // Delete a document with a specified revision.
 func (d *Database) Delete(documentID, rev string) error {
-	docURL, err := url.Parse(d.URL.String())
+	query := url.Values{}
+	query.Add("rev", rev)
+	urlStr, err := Endpoint(*d.URL, documentID, query)
 	if err != nil {
 		return err
 	}
 
-	docURL.Path = path.Join(docURL.Path, documentID)
-
-	q := docURL.Query()
-	q.Add("rev", rev) // add 'rev' param
-
-	docURL.RawQuery = q.Encode()
-
-	job, err := d.client.request("DELETE", docURL.String(), nil)
+	job, err := d.client.request("DELETE", urlStr, nil)
 	defer job.Close()
 	if err != nil {
 		return err
 	}
 
-	if job.response.StatusCode != 200 {
-		return fmt.Errorf(
-			"failed to delete document %s, status %d", documentID, job.response.StatusCode)
-	}
-
-	return nil
+	return expectedReturnCodes(job, 200)
 }
 
 // Set a document. The specified type must have a json '_id' attribute.
@@ -274,17 +290,16 @@ func (d *Database) Set(document interface{}) (string, error) {
 		return "", err
 	}
 
-	b := bytes.NewReader(jsonDocument)
-	job, err := d.client.request("POST", d.URL.String(), b)
+	job, err := d.client.request("POST", d.URL.String(), bytes.NewReader(jsonDocument))
 	defer job.Close()
 
 	if err != nil {
 		return "", err
 	}
 
-	if job.response.StatusCode != 201 && job.response.StatusCode != 202 {
-		return "", fmt.Errorf(
-			"failed to delete document, status %d", job.response.StatusCode)
+	err = expectedReturnCodes(job, 201, 202)
+	if err != nil {
+		return "", err
 	}
 
 	resp := new(DocumentMeta)

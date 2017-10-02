@@ -2,6 +2,7 @@ package cloudant
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -9,7 +10,19 @@ import (
 	"time"
 )
 
-// All requests are wrapped in a Job type.
+// CouchError is a server error response
+type CouchError struct {
+	Err        string `json:"error"`
+	Reason     string `json:"reason"`
+	StatusCode int
+}
+
+// Error() implements the error interface
+func (e *CouchError) Error() string {
+	return fmt.Sprintf("%d: {%s, %s}", e.StatusCode, e.Err, e.Reason)
+}
+
+// Job wraps all requests
 type Job struct {
 	request    *http.Request
 	response   *http.Response
@@ -18,7 +31,24 @@ type Job struct {
 	isDone     chan bool
 }
 
-// Creates a new Job from a HTTP request.
+// Convenience function to check a response for errors
+func expectedReturnCodes(job *Job, statusCodes ...int) error {
+	for _, code := range statusCodes {
+		if job.response.StatusCode == code {
+			return nil
+		}
+	}
+
+	dbError := &CouchError{}
+	err := json.NewDecoder(job.response.Body).Decode(dbError)
+	if err != nil {
+		return fmt.Errorf("Failed %d", job.response.StatusCode)
+	}
+	dbError.StatusCode = job.response.StatusCode
+	return dbError
+}
+
+// CreateJob makes a new Job from a HTTP request.
 func CreateJob(request *http.Request) *Job {
 	job := &Job{
 		request:  request,
@@ -30,7 +60,7 @@ func CreateJob(request *http.Request) *Job {
 	return job
 }
 
-// To prevent a memory leak the response body must be closed (even when it is not used).
+// Close closes the response body reader to prevent a memory leak, even if not used
 func (j *Job) Close() {
 	if j.response != nil {
 		io.Copy(ioutil.Discard, j.response.Body)
@@ -41,7 +71,7 @@ func (j *Job) Close() {
 // Mark job as done.
 func (j *Job) done() { j.isDone <- true }
 
-// Block while the job is being executed.
+// Wait blocks while the job is being executed.
 func (j *Job) Wait() { <-j.isDone }
 
 type worker struct {
@@ -57,7 +87,8 @@ func newWorker(id int, client *CouchClient) worker {
 		id:       id,
 		client:   client,
 		jobsChan: make(chan *Job),
-		quitChan: make(chan bool)}
+		quitChan: make(chan bool),
+	}
 
 	return worker
 }
@@ -85,6 +116,8 @@ func (w *worker) start() {
 			} else {
 				switch resp.StatusCode {
 				case 401:
+					// [SK] If the creds are wrong, this will spin. Maybe that's
+					// what we want?
 					LogFunc("renewing session")
 					w.client.LogIn()
 					retry = true
@@ -109,14 +142,12 @@ func (w *worker) start() {
 
 			if retry {
 				if job.retryCount < w.client.retryCountMax {
-					job.retryCount += 1
+					job.retryCount++
 
 					go func(startDelay int) {
 						time.Sleep(time.Duration(startDelay) * time.Second)
 						w.client.Execute(job)
 					}(random(w.client.retryDelayMin, w.client.retryDelayMax))
-
-					return
 				} else {
 					LogFunc("%s %s failed, too many retries",
 						job.request.Method, job.request.URL.String())
