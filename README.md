@@ -135,7 +135,7 @@ if r3.Error != nil {
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
 db, err := client.GetOrCreate("my_database")
 
-rows, err := db.All(nil)
+rows, err := db.All(&allDocsQuery{})
 
 // OR include some query options...
 //

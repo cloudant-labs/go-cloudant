@@ -1,69 +1,61 @@
 package cloudant
 
 import (
-	"bytes"
+	"crypto/rand"
 	"fmt"
-	"io/ioutil"
-	"net/http"
+	"io"
+	"os"
 )
 
-var capturedJobs []*Job
-var mockResponses []*http.Response
-
-// test account details
-var testUsername string = "user-foo"
-var testPassword string = "pa$$w0rd01"
-var testDatabaseName string = "test-database-1"
-
-type TestDocument struct {
-	Id  string `json:"_id"`
+type cloudantDocument struct {
+	ID  string `json:"_id"`
 	Foo string `json:"foo"`
 	Bar int    `json:"bar"`
 }
 
-// mock responses
-var mock200 = &http.Response{
-	Status:     "200 OK",
-	StatusCode: 200,
-	Body:       ioutil.NopCloser(bytes.NewReader([]byte("foobar"))),
-}
-var mock201 = &http.Response{
-	Status:     "201 CREATED",
-	StatusCode: 201,
-	Body:       ioutil.NopCloser(bytes.NewReader([]byte("foobar"))),
-}
-var mock412 = &http.Response{
-	Status:     "412 PRECONDITION FAILED",
-	StatusCode: 412,
-	Body:       ioutil.NopCloser(bytes.NewReader([]byte("foobar"))),
+func dbName() (string, error) {
+	uuid := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, uuid)
+	if n != len(uuid) || err != nil {
+		return "", err
+	}
+	uuid[8] = uuid[8]&^0xc0 | 0x80
+	uuid[6] = uuid[6]&^0xf0 | 0x40
+	return fmt.Sprintf("golang-%x%x%x%x%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
 
-func setupClient() (client *CouchClient) {
-	setupMocks([]*http.Response{mock200})
+func makeClient() (client *CouchClient) {
+	username := os.Getenv("COUCH_USER")
+	password := os.Getenv("COUCH_PASS")
+	client, _ = CreateClient(username, password, "https://"+username+".cloudant.com", 1)
 
-	client, _ = CreateClient(
-		testUsername, testPassword, "https://"+testUsername+".cloudant.com", 1)
-
-	return
+	return client
 }
 
-func setupMocks(responses []*http.Response) {
-	capturedJobs = []*Job{} // reset capture array
-	mockResponses = responses
+func makeDatabase() (database *Database) {
+	client := makeClient()
+	testdbname, err := dbName()
+	database, err = client.GetOrCreate(testdbname)
 
-	workerFunc = func(worker *worker, job *Job) {
-		//fmt.Println("captured job", job.request.URL.String())
+	if err != nil {
+		fmt.Printf("Created database %s", testdbname)
+	}
 
-		capturedJobs = append(capturedJobs, job)
+	return database
+}
 
-		if len(mockResponses) == 0 {
-			panic(fmt.Sprintf("unexpected request sent to server, %s",
-				job.request.URL.String()))
-		}
-
-		job.response = mockResponses[0]
-		mockResponses = mockResponses[1:]
-
-		job.isDone <- true // mark as done
+func makeDocuments(database *Database, docCount int) {
+	uploader := database.Bulk(docCount)
+	jobs := make([]*BulkJob, docCount)
+	for i := 0; i < docCount; i++ {
+		foo, _ := dbName()
+		jobs[i] = uploader.Upload(cloudantDocument{
+			ID:  fmt.Sprintf("doc-%.3d", i+1),
+			Foo: foo,
+			Bar: 123,
+		})
+	}
+	for _, job := range jobs {
+		job.Wait()
 	}
 }

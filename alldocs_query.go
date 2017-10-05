@@ -10,6 +10,8 @@ package cloudant
 //	changes, err := db.All(query)
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
 )
@@ -23,13 +25,14 @@ type AllDocsQueryBuilder interface {
 	IncludeDocs() AllDocsQueryBuilder
 	InclusiveEnd() AllDocsQueryBuilder
 	Key(string) AllDocsQueryBuilder
+	Keys([]string) AllDocsQueryBuilder
 	Limit(int) AllDocsQueryBuilder
 	Meta() AllDocsQueryBuilder
 	R(int) AllDocsQueryBuilder
 	RevsInfo() AllDocsQueryBuilder
 	Skip(int) AllDocsQueryBuilder
 	StartKey(string) AllDocsQueryBuilder
-	Build() QueryBuilder
+	Build() *allDocsQuery
 }
 
 type allDocsQueryBuilder struct {
@@ -40,6 +43,7 @@ type allDocsQueryBuilder struct {
 	includeDocs      bool
 	inclusiveEnd     bool
 	key              string
+	keys             []string
 	limit            int
 	meta             bool
 	r                int
@@ -48,22 +52,22 @@ type allDocsQueryBuilder struct {
 	startKey         string
 }
 
-// allDocsQuery holds the implemented API call parameters. The doc_ids parameter
-// is not yet implemented.
+// allDocsQuery holds the implemented API call parameters.
 type allDocsQuery struct {
-	conflicts        bool
-	deletedConflicts bool
-	descending       bool
-	endKey           string
-	includeDocs      bool
-	inclusiveEnd     bool
-	key              string
-	limit            int
-	meta             bool
-	r                int
-	revsInfo         bool
-	skip             int
-	startKey         string
+	Conflicts        bool
+	DeletedConflicts bool
+	Descending       bool
+	EndKey           string
+	IncludeDocs      bool
+	InclusiveEnd     bool
+	Key              string
+	Keys             []string
+	Limit            int
+	Meta             bool
+	R                int
+	RevsInfo         bool
+	Skip             int
+	StartKey         string
 }
 
 // NewAllDocsQuery is the entry point.
@@ -87,7 +91,7 @@ func (a *allDocsQueryBuilder) Descending() AllDocsQueryBuilder {
 }
 
 func (a *allDocsQueryBuilder) EndKey(endKey string) AllDocsQueryBuilder {
-	a.endKey = endKey
+	a.endKey = fmt.Sprintf("\"%s\"", endKey)
 	return a
 }
 
@@ -102,7 +106,12 @@ func (a *allDocsQueryBuilder) InclusiveEnd() AllDocsQueryBuilder {
 }
 
 func (a *allDocsQueryBuilder) Key(key string) AllDocsQueryBuilder {
-	a.key = key
+	a.key = fmt.Sprintf("\"%s\"", key)
+	return a
+}
+
+func (a *allDocsQueryBuilder) Keys(keys []string) AllDocsQueryBuilder {
+	a.keys = keys
 	return a
 }
 
@@ -132,72 +141,80 @@ func (a *allDocsQueryBuilder) Skip(skip int) AllDocsQueryBuilder {
 }
 
 func (a *allDocsQueryBuilder) StartKey(startKey string) AllDocsQueryBuilder {
-	a.startKey = startKey
+	a.startKey = fmt.Sprintf("\"%s\"", startKey)
 	return a
 }
 
-// QueryString implements the QueryBuilder interface. It returns an
+// GetQuery implements the QueryBuilder interface. It returns an
 // url.Values map with the non-default values set.
-func (aq *allDocsQuery) QueryString() (url.Values, error) {
+func (aq *allDocsQuery) GetQuery() (url.Values, error) {
 	vals := url.Values{}
 
-	if aq.conflicts {
+	if aq.Conflicts {
 		vals.Set("conflicts", "true")
 	}
-	if aq.descending {
+	if aq.Descending {
 		vals.Set("descending", "true")
 	}
-	if aq.includeDocs {
+	if aq.IncludeDocs {
 		vals.Set("include_docs", "true")
 	}
-	if aq.deletedConflicts {
+	if aq.DeletedConflicts {
 		vals.Set("deleted_conflicts", "true")
 	}
-	if aq.inclusiveEnd {
+	if aq.InclusiveEnd {
 		vals.Set("inclusive_end", "true")
 	}
-	if aq.revsInfo {
+	if aq.RevsInfo {
 		vals.Set("revs_info", "true")
 	}
-	if aq.meta {
+	if aq.Meta {
 		vals.Set("meta", "true")
 	}
-	if aq.endKey != "" {
-		vals.Set("endkey", aq.endKey)
+	if aq.EndKey != "" {
+		vals.Set("endkey", aq.EndKey)
 	}
-	if aq.key != "" {
-		vals.Set("key", aq.key)
+	if aq.Key != "" {
+		vals.Set("key", aq.Key)
 	}
-	if aq.startKey != "" {
-		vals.Set("startkey", aq.startKey)
+	if len(aq.Keys) > 0 {
+		data, err := json.Marshal(aq.Keys)
+		if err != nil {
+			return nil, err
+		}
+		vals.Set("keys", string(data[:]))
 	}
-	if aq.limit > 0 {
-		vals.Set("limit", strconv.Itoa(aq.limit))
+	if aq.StartKey != "" {
+		vals.Set("startkey", aq.StartKey)
 	}
-	if aq.skip > 0 {
-		vals.Set("skip", strconv.Itoa(aq.skip))
+	if aq.Limit > 0 {
+		vals.Set("limit", strconv.Itoa(aq.Limit))
 	}
-	if aq.r > 0 {
-		vals.Set("r", strconv.Itoa(aq.r))
+	if aq.Skip > 0 {
+		vals.Set("skip", strconv.Itoa(aq.Skip))
+	}
+	if aq.R > 0 {
+		vals.Set("r", strconv.Itoa(aq.R))
 	}
 
 	return vals, nil
 }
 
-func (a *allDocsQueryBuilder) Build() QueryBuilder {
+func (a *allDocsQueryBuilder) Build() *allDocsQuery {
 	return &allDocsQuery{
-		conflicts:        a.conflicts,
-		deletedConflicts: a.deletedConflicts,
-		descending:       a.descending,
-		endKey:           a.endKey,
-		includeDocs:      a.includeDocs,
-		inclusiveEnd:     a.inclusiveEnd,
-		key:              a.key,
-		limit:            a.limit,
-		meta:             a.meta,
-		r:                a.r,
-		revsInfo:         a.revsInfo,
-		skip:             a.skip,
-		startKey:         a.startKey,
+		Conflicts:        a.conflicts,
+		DeletedConflicts: a.deletedConflicts,
+		Descending:       a.descending,
+		EndKey:           a.endKey,
+		IncludeDocs:      a.includeDocs,
+		InclusiveEnd:     a.inclusiveEnd,
+		Key:              a.key,
+		Keys:             a.keys,
+		Limit:            a.limit,
+		Meta:             a.meta,
+		R:                a.r,
+		RevsInfo:         a.revsInfo,
+		Skip:             a.skip,
+		StartKey:         a.startKey,
 	}
 }
