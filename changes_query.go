@@ -113,7 +113,9 @@ func (c *changesQueryBuilder) SeqInterval(interval int) ChangesQueryBuilder {
 }
 
 func (c *changesQueryBuilder) Since(seq string) ChangesQueryBuilder {
-	c.since = seq
+	if seq != "" {
+		c.since = seq
+	}
 	return c
 }
 
