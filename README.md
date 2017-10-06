@@ -1,4 +1,5 @@
 # go-cloudant
+
 A Cloudant library for Golang.
 
 [![Build Status](https://travis.ibm.com/cloudant/go-cloudant.svg?token=wExLyHssVGfwxehwRf9S&branch=master)](https://travis.ibm.com/cloudant/go-cloudant)
@@ -6,14 +7,17 @@ A Cloudant library for Golang.
 _The API is not fully baked at this time and may change._
 
 ## Description
+
 A [Cloudant](https://cloudant.com/) library for Golang.
 
 ## Installation
+
 ```bash
 go get github.ibm.com/cloudant/go-cloudant
 ```
 
 ## Supported Features
+
 - Session authentication
 - Keep-Alive & Connection Pooling
 - Configurable request retrying
@@ -23,7 +27,8 @@ go get github.ibm.com/cloudant/go-cloudant
 
 ## Getting Started
 
-### Creating a Cloudant client:
+### Creating a Cloudant client
+
 ```go
 // create a Cloudant client (max. request concurrency 5) with default retry configuration:
 //   - maximum retries per request:     3
@@ -38,7 +43,8 @@ client1, err1 := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123
 client2, err2 := cloudant.CreateClientWithRetry("user123", "pa55w0rd01", "https://user123.cloudant.com", 20, 5, 10, 60)
 ```
 
-### `Get` a document:
+### `Get` a document
+
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -56,7 +62,8 @@ err = db.Get("my_doc", doc)
 fmt.Println(doc.Foo)  // prints 'foo' key
 ```
 
-### `Set` a document:
+### `Set` a document
+
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -73,7 +80,8 @@ newRev, err := db.Set(myDoc)
 fmt.Println(newRev)  // prints '_rev' of new document revision
 ```
 
-### `Delete` a document:
+### `Delete` a document
+
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -82,7 +90,8 @@ db, err := client.GetOrCreate("my_database")
 err := db.Delete("my_doc_id", "2-xxxxxxx")
 ```
 
-### Using `_bulk_docs`:
+### Using `_bulk_docs`
+
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -129,7 +138,8 @@ if r3.Error != nil {
 }
 ```
 
-### Using `/_all_docs`:
+### Using `/_all_docs`
+
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -140,24 +150,25 @@ rows, err := db.All(&allDocsQuery{})
 // OR include some query options...
 //
 // q := cloudant.NewAllDocsQuery().
-//		Limit(123).
-//		StartKey("foo1").
-//		EndKey("foo2").
-//		Build()
+//        Limit(123).
+//        StartKey("foo1").
+//        EndKey("foo2").
+//        Build()
 //
-//	rows, err := db.All(q)
+//    rows, err := db.All(q)
 
 for{
     row, more := <-rows
-	if more {
-	    fmt.Println(row.ID, row.Value.Rev)  // prints document 'id' and 'rev'
-	} else {
-	    break
-	}
+    if more {
+        fmt.Println(row.ID, row.Value.Rev)  // prints document 'id' and 'rev'
+    } else {
+        break
+    }
 }
 ```
 
-### Using `/_changes`:
+### Using `/_changes`
+
 ```go
 // create a Cloudant client (max. request concurrency 5)
 client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
@@ -177,6 +188,53 @@ for {
         fmt.Printf("%s\n", str)
     } else {
         break
+    }
+}
+```
+
+### Using `Follower`
+
+`Follower` is a robust changes feed follower that runs in continuous mode, emitting
+events from the changes feed on a channel. Its aims is to stay running until told to
+terminate.
+
+```go
+client, err := cloudant.CreateClient(...)
+
+db, err := client.Get(DATABASE)
+if err != nil {
+    fmt.Printf("error\n")
+    return
+}
+
+follower := cloudant.NewFollower(db)
+changes, err := follower.Follow()
+if err != nil {
+    fmt.Println(err)
+    return
+}
+
+for {
+    changeEvent := <-changes
+
+    switch changeEvent.EventType {
+    case cloudant.ChangesHeartbeat:
+        fmt.Println("tick")
+    case cloudant.ChangesError:
+        fmt.Println(changeEvent.Err)
+    case cloudant.ChangesTerminated:
+        fmt.Println("terminated; resuming from last known sequence id")
+        changes, err = follower.Follow()
+        if err != nil {
+            fmt.Println("resumption error ", err)
+            return
+        }
+    case cloudant.ChangesInsert:
+        fmt.Printf("INSERT %s\n", changeEvent.Meta.ID)
+    case cloudant.ChangesDelete:
+        fmt.Printf("DELETE %s\n", changeEvent.Meta.ID)
+    default:
+        fmt.Printf("UPDATE %s\n", changeEvent.Meta.ID)
     }
 }
 ```

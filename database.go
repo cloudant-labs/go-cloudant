@@ -36,6 +36,7 @@ type ChangeRow struct {
 	ID      string             `json:"id"`
 	Seq     string             `json:"seq"`
 	Changes []ChangeRowChanges `json:"changes"`
+	Deleted bool               `json:"deleted"`
 	Doc     interface{}        `json:"doc"`
 }
 
