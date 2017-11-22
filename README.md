@@ -115,7 +115,13 @@ myDoc3 := Doc{
         Foo:    "bar",
 }
 
-uploader := db.Bulk(50) // new uploader using batch size 50
+uploader := db.Bulk(50, 60) // new uploader using batch size 50, flushing documents to server every 60 seconds
+
+// Note: workers only flush their documents to the server:
+//  1)  periodically (set to 0 to disable)
+//  2)  when their batch size limit is reached.
+//  3)  if a document is uploaded using `.UploadNow(doc)`.
+//  4)  if a client calls `.Flush()` or `.Stop()`.
 
 uploader.FireAndForget(myDoc1)
 

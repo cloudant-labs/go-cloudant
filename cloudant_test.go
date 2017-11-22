@@ -14,7 +14,7 @@ func TestBulk(t *testing.T) {
 		database.client.Delete(database.Name)
 	}()
 
-	uploader := database.Bulk(5)
+	uploader := database.Bulk(5, 0)
 
 	// upload 5 documents
 	jobs := make([]*BulkJob, 5)
@@ -32,6 +32,38 @@ func TestBulk(t *testing.T) {
 			t.Fatal("unexpected nil job response")
 		}
 
+		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
+			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
+		}
+	}
+}
+
+func TestBulkPeriodicFlush(t *testing.T) {
+	database := makeDatabase()
+	defer func() {
+		fmt.Printf("Deleting database %s", database.Name)
+		database.client.Delete(database.Name)
+	}()
+
+	uploader := database.Bulk(10, 10)
+
+	// upload 5 documents (a partial batch)
+	jobs := make([]*BulkJob, 5)
+	for i := 0; i < 5; i++ {
+		jobs[i] = uploader.Upload(cloudantDocument{
+			ID:  fmt.Sprintf("doc-%d", i+1),
+			Foo: "foobar",
+			Bar: 123,
+		})
+	}
+
+	// allow enough time for periodic flush to complete
+	time.Sleep(30 * time.Second)
+
+	for i, job := range jobs {
+		if nil == job.Response {
+			t.Fatal("unexpected nil job response")
+		}
 		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
 			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
 		}
