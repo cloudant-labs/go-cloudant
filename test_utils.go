@@ -45,7 +45,7 @@ func makeDatabase() (database *Database) {
 }
 
 func makeDocuments(database *Database, docCount int) {
-	uploader := database.Bulk(docCount)
+	uploader := database.Bulk(docCount, 0)
 	jobs := make([]*BulkJob, docCount)
 	for i := 0; i < docCount; i++ {
 		foo, _ := dbName()

@@ -140,8 +140,8 @@ func (d *Database) All(args *allDocsQuery) (<-chan *AllRow, error) {
 }
 
 // Bulk returns a new bulk document uploader.
-func (d *Database) Bulk(batchSize int) *Uploader {
-	return newUploader(d, batchSize, bulkUploadBuffer)
+func (d *Database) Bulk(batchSize int, flushSecs int) *Uploader {
+	return newUploader(d, batchSize, bulkUploadBuffer, flushSecs)
 }
 
 // Changes returns a channel in which Change types can be received.

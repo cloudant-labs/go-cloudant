@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"time"
 )
 
 type BulkDocsRequest struct {
@@ -84,19 +85,37 @@ type Uploader struct {
 	concurrency int
 	batchSize   int
 	database    *Database
+	flushTicker *time.Ticker
 	uploadChan  chan BulkJobI
 	workerChan  chan chan BulkJobI
 	workers     []*bulkWorker
 }
 
-func newUploader(database *Database, batchSize, buffer int) *Uploader {
+func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uploader {
+	var flushTicker *time.Ticker;
+	if flushSecs > 0 {
+		flushTicker = time.NewTicker(time.Duration(flushSecs) * time.Second);
+	}
+
 	uploader := Uploader{
 		concurrency: database.client.workerCount,
 		batchSize:   batchSize,
 		database:    database,
+		flushTicker: flushTicker,
 		uploadChan:  make(chan BulkJobI, buffer),
 		workerChan:  make(chan chan BulkJobI, database.client.workerCount),
 		workers:     make([]*bulkWorker, 0),
+	}
+
+	if flushTicker != nil {
+		go func() {
+			for {
+				select {
+				case <-uploader.flushTicker.C:
+					uploader.Flush()
+				}
+			}
+		}()
 	}
 
 	uploader.start() // start workers
@@ -135,6 +154,9 @@ func (u *Uploader) start() {
 
 // Stop uploads all received documents and then terminates the upload worker(s)
 func (u *Uploader) Stop() {
+	if u.flushTicker != nil {
+		u.flushTicker.Stop();
+	}
 	jobs := []*bulkJobStop{}
 	for i := 0; i < len(u.workers); i++ {
 		job := &bulkJobStop{isDone: make(chan bool, 1)}
