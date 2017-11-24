@@ -28,16 +28,16 @@ type Change struct {
 	ID  string
 	Rev string
 	Seq string
-	Doc interface{} // Only present if Changes() called with include_docs=true
+	Doc map[string]interface{} // Only present if Changes() called with include_docs=true
 }
 
 // ChangeRow represents a part returned by _changes
 type ChangeRow struct {
-	ID      string             `json:"id"`
-	Seq     string             `json:"seq"`
-	Changes []ChangeRowChanges `json:"changes"`
-	Deleted bool               `json:"deleted"`
-	Doc     interface{}        `json:"doc"`
+	ID      string                 `json:"id"`
+	Seq     string                 `json:"seq"`
+	Changes []ChangeRowChanges     `json:"changes"`
+	Deleted bool                   `json:"deleted"`
+	Doc     map[string]interface{} `json:"doc"`
 }
 
 // ChangeRowChanges represents a part returned by _changes

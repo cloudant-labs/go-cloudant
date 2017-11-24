@@ -99,6 +99,41 @@ func TestDatabase_StaticChanges(t *testing.T) {
 	}
 }
 
+func TestDatabase_ChangesIncludeDocs(t *testing.T) {
+	database := makeDatabase()
+	defer func() {
+		fmt.Printf("Deleting database %s", database.Name)
+		database.client.Delete(database.Name)
+	}()
+
+	makeDocuments(database, 1000)
+	query := NewChangesQuery().
+		IncludeDocs().
+		Build()
+
+	changes, err := database.Changes(query)
+	if err != nil {
+		t.Error(err)
+	}
+
+	i := 0
+	for {
+		ch, more := <-changes
+		if more {
+			i++
+		} else {
+			break
+		}
+		if ch.Doc == nil {
+			t.Error("Missing doc body")
+		}
+	}
+
+	if 1000 != i {
+		t.Errorf("unexpected number of changes received %d", i)
+	}
+}
+
 func TestDatabase_ContinousChanges(t *testing.T) {
 	database := makeDatabase()
 	defer func() {
