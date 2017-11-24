@@ -28,7 +28,7 @@ type ChangeEvent struct {
 	EventType int
 	Meta      *DocumentMeta
 	Seq       string
-	Doc       interface{}
+	Doc       map[string]interface{}
 	Err       error
 }
 
