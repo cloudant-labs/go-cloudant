@@ -1,6 +1,7 @@
 package cloudant
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -679,5 +680,26 @@ func TestDatabase_DeleteDoc(t *testing.T) {
 	err = database.Delete("doc-new", rev)
 	if err == nil { // should fail
 		t.Error("unexpected return code from delete")
+	}
+}
+
+// TestChanges_CouchDB16 checks that we can read old-style changes feeds
+// that uses a sequence ID which is an integer
+func TestChanges_CouchDB16(t *testing.T) {
+	data1 := []byte(`{"seq":59,"id":"5100a7174427c7dfc1ecc5971949f201","changes":[{"rev":"1-cd6870b027e3a728bce927d4a1e0b3ab"}]}`)
+	data2 := []byte(`{"seq":"59","id":"5100a7174427c7dfc1ecc5971949f201","changes":[{"rev":"1-cd6870b027e3a728bce927d4a1e0b3ab"}]}`)
+
+	cr1 := &ChangeRow{}
+	if err := json.Unmarshal(data1, cr1); err != nil {
+		t.Error(err)
+	}
+
+	cr2 := &ChangeRow{}
+	if err := json.Unmarshal(data2, cr2); err != nil {
+		t.Error(err)
+	}
+
+	if cr1.Seq != cr2.Seq {
+		t.Error("failed to parse CouchDB1.6-formatted changes data")
 	}
 }
