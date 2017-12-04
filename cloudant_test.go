@@ -8,8 +8,12 @@ import (
 	"time"
 )
 
-func TestBulk(t *testing.T) {
-	database := makeDatabase()
+func TestBulkAsyncFlush(t *testing.T) {
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -27,9 +31,77 @@ func TestBulk(t *testing.T) {
 		})
 	}
 
+	uploader.AsyncFlush()
+
 	for i, job := range jobs {
 		job.Wait()
-		if nil == job.Response {
+		if job.Response == nil {
+			t.Fatal("unexpected nil job response")
+		}
+
+		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
+			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
+		}
+	}
+}
+
+func TestBulkAsyncFlushTwoBatches(t *testing.T) {
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	defer func() {
+		fmt.Printf("Deleting database %s", database.Name)
+		database.client.Delete(database.Name)
+	}()
+
+	uploader := database.Bulk(5, 0)
+
+	// upload 5 documents
+	jobs := make([]*BulkJob, 5)
+	for i := 0; i < 5; i++ {
+		jobs[i] = uploader.Upload(cloudantDocument{
+			ID:  fmt.Sprintf("doc-%d", i+1),
+			Foo: "foobar",
+			Bar: 123,
+		})
+	}
+
+	uploader.AsyncFlush()
+
+	result := []*BulkDocsResponse{}
+	for i, job := range jobs {
+		job.Wait()
+		if job.Response == nil {
+			t.Fatal("unexpected nil job response")
+		}
+
+		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
+			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
+		}
+
+		result = append(result, job.Response)
+	}
+
+	for i := 0; i < 5; i++ {
+		foo, _ := dbName()
+		jobs[i] = uploader.Upload(&struct {
+			ID  string `json:"_id"`
+			Rev string `json:"_rev"`
+			Foo string
+		}{
+			result[i].Id,
+			result[i].Rev,
+			foo,
+		})
+	}
+
+	uploader.AsyncFlush()
+
+	for i, job := range jobs {
+		job.Wait()
+		if job.Response == nil {
 			t.Fatal("unexpected nil job response")
 		}
 
@@ -40,7 +112,10 @@ func TestBulk(t *testing.T) {
 }
 
 func TestBulkPeriodicFlush(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -62,7 +137,7 @@ func TestBulkPeriodicFlush(t *testing.T) {
 	time.Sleep(30 * time.Second)
 
 	for i, job := range jobs {
-		if nil == job.Response {
+		if job.Response == nil {
 			t.Fatal("unexpected nil job response")
 		}
 		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
@@ -72,7 +147,10 @@ func TestBulkPeriodicFlush(t *testing.T) {
 }
 
 func TestDatabase_StaticChanges(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -101,7 +179,10 @@ func TestDatabase_StaticChanges(t *testing.T) {
 }
 
 func TestDatabase_ChangesIncludeDocs(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -136,7 +217,10 @@ func TestDatabase_ChangesIncludeDocs(t *testing.T) {
 }
 
 func TestDatabase_ContinousChanges(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -170,7 +254,10 @@ func TestDatabase_ContinousChanges(t *testing.T) {
 }
 
 func TestDatabase_ChangesSeqInterval(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -203,7 +290,10 @@ func TestDatabase_ChangesSeqInterval(t *testing.T) {
 }
 
 func TestDatabase_All(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -237,7 +327,10 @@ func TestDatabase_All(t *testing.T) {
 }
 
 func TestDatabase_AllDocKeys(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -276,7 +369,10 @@ func TestDatabase_AllDocKeys(t *testing.T) {
 }
 
 func TestDatabase_AllDocKey(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -463,7 +559,10 @@ func TestDatabase_GetArgs(t *testing.T) {
 }
 
 func TestDatabase_Error4XX(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -473,7 +572,7 @@ func TestDatabase_Error4XX(t *testing.T) {
 
 	doc := &cloudantDocument{}
 
-	err := database.Get("NOTHERE", &getQuery{}, doc)
+	err = database.Get("NOTHERE", &getQuery{}, doc)
 	if err == nil {
 		t.Errorf("Expected a 404 error, got nil")
 		return
@@ -488,7 +587,10 @@ func TestDatabase_Error4XX(t *testing.T) {
 }
 
 func TestDatabase_Get(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -507,7 +609,11 @@ func TestDatabase_Get(t *testing.T) {
 func TestDatabase_GetWithRev(t *testing.T) {
 	// Note: this is generally a bad idea, as subject to eventual consistency
 	// constraints.
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -591,7 +697,10 @@ func TestDatabase_GetWithRev(t *testing.T) {
 func TestDatabase_Set(t *testing.T) {
 	// Note: this is generally a bad idea, as subject to eventual consistency
 	// constraints.
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)
@@ -645,7 +754,10 @@ func TestDatabase_Set(t *testing.T) {
 }
 
 func TestDatabase_DeleteDoc(t *testing.T) {
-	database := makeDatabase()
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
 		database.client.Delete(database.Name)

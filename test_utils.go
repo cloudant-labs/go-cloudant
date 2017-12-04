@@ -24,38 +24,39 @@ func dbName() (string, error) {
 	return fmt.Sprintf("golang-%x%x%x%x%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
 
-func makeClient() (client *CouchClient) {
+func makeClient() (*CouchClient, error) {
 	username := os.Getenv("COUCH_USER")
 	password := os.Getenv("COUCH_PASS")
-	client, _ = CreateClient(username, password, "https://"+username+".cloudant.com", 1)
 
-	return client
-}
-
-func makeDatabase() (database *Database) {
-	client := makeClient()
-	testdbname, err := dbName()
-	database, err = client.GetOrCreate(testdbname)
-
-	if err != nil {
-		fmt.Printf("Created database %s", testdbname)
+	if username == "" || password == "" {
+		return nil, fmt.Errorf("Expected env vars COUCH_USER and COUCH_PASS to be set")
 	}
 
-	return database
+	return CreateClient(username, password, "https://"+username+".cloudant.com", 5)
+}
+
+func makeDatabase() (*Database, error) {
+	client, err := makeClient()
+	if err != nil {
+		return nil, err
+	}
+	testdbname, err := dbName()
+	if err != nil {
+		return nil, err
+	}
+
+	return client.GetOrCreate(testdbname)
 }
 
 func makeDocuments(database *Database, docCount int) {
 	uploader := database.Bulk(docCount, 0)
-	jobs := make([]*BulkJob, docCount)
 	for i := 0; i < docCount; i++ {
 		foo, _ := dbName()
-		jobs[i] = uploader.Upload(cloudantDocument{
+		uploader.Upload(cloudantDocument{
 			ID:  fmt.Sprintf("doc-%.3d", i+1),
 			Foo: foo,
 			Bar: 123,
 		})
 	}
-	for _, job := range jobs {
-		job.Wait()
-	}
+	uploader.Flush()
 }
