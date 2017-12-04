@@ -64,6 +64,7 @@ func (j *BulkJob) done()               { j.isDone <- true }
 func (j *BulkJob) Wait() { <-j.isDone }
 
 type bulkJobFlush struct {
+	async  bool
 	isDone chan bool
 }
 
@@ -155,9 +156,16 @@ func (u *Uploader) BulkUploadSimple(docs []interface{}) ([]BulkDocsResponse, err
 	return responses, nil
 }
 
-// Flush uploads all received documents.
+// Flush blocks until all received documents have been uploaded.
 func (u *Uploader) Flush() {
 	job := &bulkJobFlush{isDone: make(chan bool, 1)}
+	u.uploadChan <- job
+	job.Wait()
+}
+
+// AsyncFlush asynchronously uploads all received documents.
+func (u *Uploader) AsyncFlush() {
+	job := &bulkJobFlush{async: true, isDone: make(chan bool, 1)}
 	u.uploadChan <- job
 	job.Wait()
 }
@@ -185,8 +193,10 @@ func (u *Uploader) start() {
 					<-u.workerChan
 					flushJobs[i] = worker.flush()
 				}
-				for _, flushJob := range flushJobs {
-					flushJob.Wait()
+				if !j.async {
+					for _, flushJob := range flushJobs {
+						flushJob.Wait()
+					}
 				}
 				j.done()
 			case *bulkJobStop:
