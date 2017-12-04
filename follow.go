@@ -34,10 +34,11 @@ type ChangeEvent struct {
 
 // Follower is the orchestrator
 type Follower struct {
-	lastEvent time.Time
-	db        *Database
-	quit      chan bool
-	since     string
+	lastEvent   time.Time
+	db          *Database
+	quit        chan bool
+	since       string
+	seqInterval int
 }
 
 // eventType tries to classify the current event as insert, delete or update.
@@ -54,11 +55,12 @@ func eventType(change *ChangeRow) int {
 }
 
 // NewFollower creates a Follower on database's changes
-func NewFollower(database *Database) *Follower {
+func NewFollower(database *Database, interval int) *Follower {
 	quit := make(chan bool)
 	follower := &Follower{
-		db:   database,
-		quit: quit,
+		db:          database,
+		quit:        quit,
+		seqInterval: interval,
 	}
 	return follower
 }
@@ -77,10 +79,15 @@ func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
 		Feed("continuous").
 		Since(f.since).
 		Heartbeat(10).
-		Timeout(30).
-		Build()
+		Timeout(30)
 
-	params, _ := query.GetQuery()
+	if f.seqInterval > 0 {
+		query = query.SeqInterval(f.seqInterval)
+	}
+
+	params, _ := query.
+		Build().
+		GetQuery()
 
 	urlStr, err := Endpoint(*f.db.URL, "/_changes", params)
 	if err != nil {

@@ -213,7 +213,8 @@ if err != nil {
     return
 }
 
-follower := cloudant.NewFollower(db)
+// Only generate a Seq ID every 100 changes
+follower := cloudant.NewFollower(db, 100)
 changes, err := follower.Follow()
 if err != nil {
     fmt.Println(err)

@@ -25,19 +25,43 @@ type AllRowValue struct {
 
 // Change represents a part returned by _changes
 type Change struct {
-	ID  string
-	Rev string
-	Seq string
-	Doc map[string]interface{} // Only present if Changes() called with include_docs=true
+	ID      string
+	Rev     string
+	Seq     string
+	Deleted bool
+	Doc     map[string]interface{} // Only present if Changes() called with include_docs=true
 }
 
 // ChangeRow represents a part returned by _changes
 type ChangeRow struct {
 	ID      string                 `json:"id"`
-	Seq     string                 `json:"seq"`
+	Seq     string                 `json:"seq"` // If using CouchDB1.6, this is a number
 	Changes []ChangeRowChanges     `json:"changes"`
 	Deleted bool                   `json:"deleted"`
 	Doc     map[string]interface{} `json:"doc"`
+}
+
+// UnmarshalJSON is here for coping with CouchDB1.6's sequence IDs being
+// numbers, not strings as in Cloudant and CouchDB2.X.
+//
+// See https://play.golang.org/p/BytXCeHMvt
+func (c *ChangeRow) UnmarshalJSON(data []byte) error {
+	// Create a new type with same structure as ChangeRow but without its method set
+	// to avoid an infinite `UnmarshalJSON` call stack
+	type ChangeRow16 ChangeRow
+	changeRow := struct {
+		ChangeRow16
+		Seq json.Number `json:"seq"`
+	}{ChangeRow16: ChangeRow16(*c)}
+
+	if err := json.Unmarshal(data, &changeRow); err != nil {
+		return err
+	}
+
+	*c = ChangeRow(changeRow.ChangeRow16)
+	c.Seq = changeRow.Seq.String()
+
+	return nil
 }
 
 // ChangeRowChanges represents a part returned by _changes
@@ -204,10 +228,11 @@ func (d *Database) Changes(args *changesQuery) (<-chan *Change, error) {
 				err := json.Unmarshal([]byte(lineStr), change)
 				if err == nil && len(change.Changes) == 1 {
 					changes <- &Change{
-						ID:  change.ID,
-						Rev: change.Changes[0].Rev,
-						Seq: change.Seq,
-						Doc: change.Doc,
+						ID:      change.ID,
+						Rev:     change.Changes[0].Rev,
+						Seq:     change.Seq,
+						Doc:     change.Doc,
+						Deleted: change.Deleted,
 					}
 				} else {
 					fmt.Println(err)

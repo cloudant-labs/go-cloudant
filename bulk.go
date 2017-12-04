@@ -60,7 +60,7 @@ func (j *BulkJob) getDoc() interface{} { return j.doc }
 func (j *BulkJob) isPriority() bool    { return j.priority }
 func (j *BulkJob) done()               { j.isDone <- true }
 
-// Block while the job is being executed.
+// Wait blocks while the job is being executed.
 func (j *BulkJob) Wait() { <-j.isDone }
 
 type bulkJobFlush struct {
@@ -81,6 +81,7 @@ func (j *bulkJobStop) isPriority() bool    { return false }
 func (j *bulkJobStop) done()               { j.isDone <- true }
 func (j *bulkJobStop) Wait()               { <-j.isDone }
 
+// Uploader is where Mr Smartypants live
 type Uploader struct {
 	concurrency int
 	batchSize   int
@@ -92,9 +93,9 @@ type Uploader struct {
 }
 
 func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uploader {
-	var flushTicker *time.Ticker;
+	var flushTicker *time.Ticker
 	if flushSecs > 0 {
-		flushTicker = time.NewTicker(time.Duration(flushSecs) * time.Second);
+		flushTicker = time.NewTicker(time.Duration(flushSecs) * time.Second)
 	}
 
 	uploader := Uploader{
@@ -121,6 +122,37 @@ func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uplo
 	uploader.start() // start workers
 
 	return &uploader
+}
+
+// BulkUploadSimple does a one-shot synchronous bulk upload
+func (u *Uploader) BulkUploadSimple(docs []interface{}) ([]BulkDocsResponse, error) {
+	result, err := uploadBulkDocs(&BulkDocsRequest{docs}, u.database)
+	defer result.Close()
+
+	if err != nil || result == nil {
+		LogFunc(fmt.Sprintf("bulk upload error, %s", err))
+		return nil, err
+	}
+
+	if result.response == nil {
+		LogFunc("bulk upload error, no response from server")
+		return nil, err
+	}
+
+	if result.response.StatusCode != 201 && result.response.StatusCode != 202 {
+		LogFunc(fmt.Sprintf("failed to upload bulk documents, status %d",
+			result.response.StatusCode))
+		return nil, err
+	}
+
+	responses := []BulkDocsResponse{}
+	err = json.NewDecoder(result.response.Body).Decode(&responses)
+	if err != nil {
+		LogFunc(fmt.Sprintf("failed to decode /_bulk_docs response, %s", err))
+		return nil, err
+	}
+
+	return responses, nil
 }
 
 // Flush uploads all received documents.
@@ -155,7 +187,7 @@ func (u *Uploader) start() {
 // Stop uploads all received documents and then terminates the upload worker(s)
 func (u *Uploader) Stop() {
 	if u.flushTicker != nil {
-		u.flushTicker.Stop();
+		u.flushTicker.Stop()
 	}
 	jobs := []*bulkJobStop{}
 	for i := 0; i < len(u.workers); i++ {
