@@ -125,7 +125,7 @@ uploader := db.Bulk(50, 60) // new uploader using batch size 50, flushing docume
 
 uploader.FireAndForget(myDoc1)
 
-upload.Flush() // uploads all received documents
+upload.Flush() // blocks until all received documents have been uploaded
 
 r2 := uploader.UploadNow(myDoc2) // uploaded as soon as it's received by a worker
 
@@ -136,7 +136,9 @@ if r2.Error != nil {
 
 r3 := uploader.Upload(myDoc3) // queues until the worker creates a full batch of 50 documents
 
-upload.Stop() // uploads any queued documents before stopping
+upload.AsyncFlush() // asynchronously uploads all received documents
+
+upload.Stop() // blocks until all documents have been uploaded and workers have stopped
 
 r3.Wait()
 if r3.Error != nil {

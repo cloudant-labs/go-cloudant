@@ -64,6 +64,7 @@ func (j *BulkJob) done()               { j.isDone <- true }
 func (j *BulkJob) Wait() { <-j.isDone }
 
 type bulkJobFlush struct {
+	async  bool
 	isDone chan bool
 }
 
@@ -155,12 +156,18 @@ func (u *Uploader) BulkUploadSimple(docs []interface{}) ([]BulkDocsResponse, err
 	return responses, nil
 }
 
-// Flush uploads all received documents.
+// Flush blocks until all received documents have been uploaded.
 func (u *Uploader) Flush() {
-	for _, worker := range u.workers {
-		job := worker.flush()
-		job.Wait()
-	}
+	job := &bulkJobFlush{isDone: make(chan bool, 1)}
+	u.uploadChan <- job
+	job.Wait()
+}
+
+// AsyncFlush asynchronously uploads all received documents.
+func (u *Uploader) AsyncFlush() {
+	job := &bulkJobFlush{async: true, isDone: make(chan bool, 1)}
+	u.uploadChan <- job
+	job.Wait()
 }
 
 func (u *Uploader) start() {
@@ -175,10 +182,33 @@ func (u *Uploader) start() {
 	// start dispatcher
 	go func() {
 		for {
-			select {
-			case job := <-u.uploadChan:
+			job := <-u.uploadChan
+			switch j := job.(type) {
+			case *BulkJob:
 				worker := <-u.workerChan
-				worker <- job
+				worker <- j
+			case *bulkJobFlush:
+				flushJobs := make([]*bulkJobFlush, len(u.workers))
+				for i, worker := range u.workers {
+					<-u.workerChan
+					flushJobs[i] = worker.flush()
+				}
+				if !j.async {
+					for _, flushJob := range flushJobs {
+						flushJob.Wait()
+					}
+				}
+				j.done()
+			case *bulkJobStop:
+				stopJobs := make([]*bulkJobStop, len(u.workers))
+				for i, worker := range u.workers {
+					<-u.workerChan
+					stopJobs[i] = worker.stop()
+				}
+				for _, stopJob := range stopJobs {
+					stopJob.Wait()
+				}
+				j.done()
 			}
 		}
 	}()
@@ -189,16 +219,9 @@ func (u *Uploader) Stop() {
 	if u.flushTicker != nil {
 		u.flushTicker.Stop()
 	}
-	jobs := []*bulkJobStop{}
-	for i := 0; i < len(u.workers); i++ {
-		job := &bulkJobStop{isDone: make(chan bool, 1)}
-		go func() { u.uploadChan <- job }()
-		jobs = append(jobs, job)
-	}
-
-	for _, job := range jobs {
-		job.Wait()
-	}
+	job := &bulkJobStop{isDone: make(chan bool, 1)}
+	u.uploadChan <- job
+	job.Wait()
 }
 
 // FireAndForget adds a document to the upload queue ready for processing by the upload worker(s).
@@ -259,26 +282,28 @@ func (w *bulkWorker) start() {
 
 			job := <-w.jobChan
 
-			switch t := job.(type) {
+			switch j := job.(type) {
 			case *BulkJob:
-				bulkDocs.Docs = append(bulkDocs.Docs, job.getDoc())
-				liveJobs = append(liveJobs, t)
+				bulkDocs.Docs = append(bulkDocs.Docs, j.getDoc())
+				liveJobs = append(liveJobs, j)
 
-				if job.isPriority() || len(bulkDocs.Docs) >= w.uploader.batchSize {
-					processJobs(liveJobs, bulkDocs, w.uploader)
+				if j.isPriority() || len(bulkDocs.Docs) >= w.uploader.batchSize {
+					processJobs(nil, liveJobs, bulkDocs, w.uploader)
 					liveJobs = liveJobs[:0] // clear jobs
 				}
 			case *bulkJobFlush:
 				if len(bulkDocs.Docs) > 0 {
-					processJobs(liveJobs, bulkDocs, w.uploader)
+					processJobs(j, liveJobs, bulkDocs, w.uploader)
 					liveJobs = liveJobs[:0] // clear jobs
+				} else {
+					j.done()
 				}
-				job.done()
 			case *bulkJobStop:
 				if len(bulkDocs.Docs) > 0 {
-					processJobs(liveJobs, bulkDocs, w.uploader)
+					processJobs(j, liveJobs, bulkDocs, w.uploader)
+				} else {
+					j.done()
 				}
-				job.done()
 
 				return
 			}
@@ -286,21 +311,33 @@ func (w *bulkWorker) start() {
 	}()
 }
 
-func processJobs(jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
+func (w *bulkWorker) stop() *bulkJobStop {
+	job := &bulkJobStop{isDone: make(chan bool, 1)}
+	go func() { w.jobChan <- job }()
+
+	return job
+}
+
+func processJobs(parent BulkJobI, jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
 	if len(req.Docs) == 0 {
 		return
 	}
 
 	result, err := uploadBulkDocs(req, uploader.database)
 
-	go processResult(jobs, result, err)
+	go processResult(parent, jobs, result, err)
 
 	req.Docs = req.Docs[:0] // reset
 }
 
-func processResult(jobs []*BulkJob, result *Job, err error) {
-	defer result.Close()
-	defer doneAllJobs(jobs)
+func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error) {
+	defer func() {
+		result.Close()
+		doneAllJobs(jobs)
+		if parent != nil {
+			parent.done()
+		}
+	}()
 
 	if err != nil || result == nil {
 		errMsg := fmt.Sprint("bulk upload error", err)
