@@ -1,6 +1,7 @@
 package cloudant
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ func (e *CouchError) Error() string {
 type Job struct {
 	request    *http.Request
 	response   *http.Response
+	bodyBytes  []byte
 	retryCount int
 	error      error
 	isDone     chan bool
@@ -107,6 +109,18 @@ func (w *worker) start() {
 		workerFunc = func(worker *worker, job *Job) {
 			LogFunc("Request (attempt: %d) %s %s", job.retryCount, job.request.Method,
 				job.request.URL.String())
+
+			// save body for retries
+			if job.retryCount == 0 && job.request.Body != nil {
+				var err error
+				job.bodyBytes, err = ioutil.ReadAll(job.request.Body)
+				if err != nil {
+					LogFunc("failed to read request body, %s", err)
+				}
+			}
+
+			job.request.Body = ioutil.NopCloser(bytes.NewReader(job.bodyBytes))
+
 			resp, err := worker.client.httpClient.Do(job.request)
 
 			var retry bool
@@ -142,12 +156,14 @@ func (w *worker) start() {
 
 			if retry {
 				if job.retryCount < w.client.retryCountMax {
-					job.retryCount++
+					job.retryCount += 1
 
 					go func(startDelay int) {
 						time.Sleep(time.Duration(startDelay) * time.Second)
 						w.client.Execute(job)
 					}(random(w.client.retryDelayMin, w.client.retryDelayMax))
+
+					return
 				} else {
 					LogFunc("%s %s failed, too many retries",
 						job.request.Method, job.request.URL.String())
