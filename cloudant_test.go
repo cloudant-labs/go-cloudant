@@ -39,8 +39,8 @@ func TestBulkAsyncFlush(t *testing.T) {
 			t.Fatal("unexpected nil job response")
 		}
 
-		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
-			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
+		if fmt.Sprintf("doc-%d", i+1) != job.Response.ID {
+			t.Errorf("unexpected job %d response id %s", i+1, job.Response.ID)
 		}
 	}
 }
@@ -77,8 +77,8 @@ func TestBulkAsyncFlushTwoBatches(t *testing.T) {
 			t.Fatal("unexpected nil job response")
 		}
 
-		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
-			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
+		if fmt.Sprintf("doc-%d", i+1) != job.Response.ID {
+			t.Errorf("unexpected job %d response id %s", i+1, job.Response.ID)
 		}
 
 		result = append(result, job.Response)
@@ -91,7 +91,7 @@ func TestBulkAsyncFlushTwoBatches(t *testing.T) {
 			Rev string `json:"_rev"`
 			Foo string
 		}{
-			result[i].Id,
+			result[i].ID,
 			result[i].Rev,
 			foo,
 		})
@@ -105,8 +105,8 @@ func TestBulkAsyncFlushTwoBatches(t *testing.T) {
 			t.Fatal("unexpected nil job response")
 		}
 
-		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
-			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
+		if fmt.Sprintf("doc-%d", i+1) != job.Response.ID {
+			t.Errorf("unexpected job %d response id %s", i+1, job.Response.ID)
 		}
 	}
 }
@@ -140,8 +140,8 @@ func TestBulkPeriodicFlush(t *testing.T) {
 		if job.Response == nil {
 			t.Fatal("unexpected nil job response")
 		}
-		if fmt.Sprintf("doc-%d", i+1) != job.Response.Id {
-			t.Errorf("unexpected job %d response id %s", i+1, job.Response.Id)
+		if fmt.Sprintf("doc-%d", i+1) != job.Response.ID {
+			t.Errorf("unexpected job %d response id %s", i+1, job.Response.ID)
 		}
 	}
 }
