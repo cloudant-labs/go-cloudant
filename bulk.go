@@ -289,12 +289,14 @@ func (w *bulkWorker) start() {
 
 				if j.isPriority() || len(bulkDocs.Docs) >= w.uploader.batchSize {
 					processJobs(nil, liveJobs, bulkDocs, w.uploader)
-					liveJobs = liveJobs[:0] // clear jobs
+					bulkDocs.Docs = nil
+					liveJobs = nil
 				}
 			case *bulkJobFlush:
 				if len(bulkDocs.Docs) > 0 {
 					processJobs(j, liveJobs, bulkDocs, w.uploader)
-					liveJobs = liveJobs[:0] // clear jobs
+					bulkDocs.Docs = nil
+					liveJobs = nil
 				} else {
 					j.done()
 				}
@@ -320,10 +322,7 @@ func (w *bulkWorker) stop() *bulkJobStop {
 
 func processJobs(parent BulkJobI, jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
 	result, err := uploadBulkDocs(req, uploader.database)
-
-	go processResult(parent, jobs, result, err)
-
-	req.Docs = req.Docs[:0] // reset
+	processResult(parent, jobs, result, err)
 }
 
 func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error) {
