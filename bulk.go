@@ -64,7 +64,6 @@ func (j *BulkJob) done()               { j.isDone <- true }
 func (j *BulkJob) Wait() { <-j.isDone }
 
 type bulkJobFlush struct {
-	async  bool
 	isDone chan bool
 }
 
@@ -114,7 +113,7 @@ func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uplo
 			for {
 				select {
 				case <-uploader.flushTicker.C:
-					uploader.Flush()
+					uploader.AsyncFlush()
 				}
 			}
 		}()
@@ -165,9 +164,8 @@ func (u *Uploader) Flush() {
 
 // AsyncFlush asynchronously uploads all received documents.
 func (u *Uploader) AsyncFlush() {
-	job := &bulkJobFlush{async: true, isDone: make(chan bool, 1)}
+	job := &bulkJobFlush{isDone: make(chan bool, 1)}
 	u.uploadChan <- job
-	job.Wait()
 }
 
 func (u *Uploader) start() {
@@ -193,10 +191,8 @@ func (u *Uploader) start() {
 					<-u.workerChan
 					flushJobs[i] = worker.flush()
 				}
-				if !j.async {
-					for _, flushJob := range flushJobs {
-						flushJob.Wait()
-					}
+				for _, flushJob := range flushJobs {
+					flushJob.Wait()
 				}
 				j.done()
 			case *bulkJobStop:
@@ -267,7 +263,7 @@ func newBulkWorker(id int, uploader *Uploader) *bulkWorker {
 
 func (w *bulkWorker) flush() *bulkJobFlush {
 	job := &bulkJobFlush{isDone: make(chan bool, 1)}
-	go func() { w.jobChan <- job }()
+	w.jobChan <- job
 
 	return job
 }
@@ -289,12 +285,14 @@ func (w *bulkWorker) start() {
 
 				if j.isPriority() || len(bulkDocs.Docs) >= w.uploader.batchSize {
 					processJobs(nil, liveJobs, bulkDocs, w.uploader)
-					liveJobs = liveJobs[:0] // clear jobs
+					bulkDocs.Docs = nil
+					liveJobs = nil
 				}
 			case *bulkJobFlush:
 				if len(bulkDocs.Docs) > 0 {
 					processJobs(j, liveJobs, bulkDocs, w.uploader)
-					liveJobs = liveJobs[:0] // clear jobs
+					bulkDocs.Docs = nil
+					liveJobs = nil
 				} else {
 					j.done()
 				}
@@ -313,21 +311,14 @@ func (w *bulkWorker) start() {
 
 func (w *bulkWorker) stop() *bulkJobStop {
 	job := &bulkJobStop{isDone: make(chan bool, 1)}
-	go func() { w.jobChan <- job }()
+	w.jobChan <- job
 
 	return job
 }
 
 func processJobs(parent BulkJobI, jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
-	if len(req.Docs) == 0 {
-		return
-	}
-
 	result, err := uploadBulkDocs(req, uploader.database)
-
-	go processResult(parent, jobs, result, err)
-
-	req.Docs = req.Docs[:0] // reset
+	processResult(parent, jobs, result, err)
 }
 
 func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error) {
