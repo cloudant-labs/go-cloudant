@@ -267,7 +267,7 @@ func newBulkWorker(id int, uploader *Uploader) *bulkWorker {
 
 func (w *bulkWorker) flush() *bulkJobFlush {
 	job := &bulkJobFlush{isDone: make(chan bool, 1)}
-	go func() { w.jobChan <- job }()
+	w.jobChan <- job
 
 	return job
 }
@@ -313,7 +313,7 @@ func (w *bulkWorker) start() {
 
 func (w *bulkWorker) stop() *bulkJobStop {
 	job := &bulkJobStop{isDone: make(chan bool, 1)}
-	go func() { w.jobChan <- job }()
+	w.jobChan <- job
 
 	return job
 }
