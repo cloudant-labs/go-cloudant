@@ -64,7 +64,6 @@ func (j *BulkJob) done()               { j.isDone <- true }
 func (j *BulkJob) Wait() { <-j.isDone }
 
 type bulkJobFlush struct {
-	async  bool
 	isDone chan bool
 }
 
@@ -114,7 +113,7 @@ func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uplo
 			for {
 				select {
 				case <-uploader.flushTicker.C:
-					uploader.Flush()
+					uploader.AsyncFlush()
 				}
 			}
 		}()
@@ -165,9 +164,8 @@ func (u *Uploader) Flush() {
 
 // AsyncFlush asynchronously uploads all received documents.
 func (u *Uploader) AsyncFlush() {
-	job := &bulkJobFlush{async: true, isDone: make(chan bool, 1)}
+	job := &bulkJobFlush{isDone: make(chan bool, 1)}
 	u.uploadChan <- job
-	job.Wait()
 }
 
 func (u *Uploader) start() {
@@ -193,10 +191,8 @@ func (u *Uploader) start() {
 					<-u.workerChan
 					flushJobs[i] = worker.flush()
 				}
-				if !j.async {
-					for _, flushJob := range flushJobs {
-						flushJob.Wait()
-					}
+				for _, flushJob := range flushJobs {
+					flushJob.Wait()
 				}
 				j.done()
 			case *bulkJobStop:
