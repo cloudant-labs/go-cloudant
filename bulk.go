@@ -319,10 +319,6 @@ func (w *bulkWorker) stop() *bulkJobStop {
 }
 
 func processJobs(parent BulkJobI, jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
-	if len(req.Docs) == 0 {
-		return
-	}
-
 	result, err := uploadBulkDocs(req, uploader.database)
 
 	go processResult(parent, jobs, result, err)
