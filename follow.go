@@ -3,9 +3,7 @@ package cloudant
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"strings"
-	"time"
 )
 
 // Constants defining the possible event types in a changes feed
@@ -34,9 +32,9 @@ type ChangeEvent struct {
 
 // Follower is the orchestrator
 type Follower struct {
-	lastEvent   time.Time
 	db          *Database
-	quit        chan bool
+	stop        chan struct{}
+	stopped     chan struct{}
 	since       string
 	seqInterval int
 }
@@ -56,10 +54,10 @@ func eventType(change *ChangeRow) int {
 
 // NewFollower creates a Follower on database's changes
 func NewFollower(database *Database, interval int) *Follower {
-	quit := make(chan bool)
 	follower := &Follower{
 		db:          database,
-		quit:        quit,
+		stop:        make(chan struct{}),
+		stopped:     make(chan struct{}),
 		seqInterval: interval,
 	}
 	return follower
@@ -67,9 +65,8 @@ func NewFollower(database *Database, interval int) *Follower {
 
 // Close will terminate the Follower
 func (f *Follower) Close() {
-	fmt.Println("Follower closing down")
-	f.quit <- true
-	close(f.quit)
+	close(f.stop)
+	<-f.stopped
 }
 
 // Follow starts listening to the changes feed
@@ -85,9 +82,7 @@ func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
 		query = query.SeqInterval(f.seqInterval)
 	}
 
-	params, _ := query.
-		Build().
-		GetQuery()
+	params, _ := query.Build().GetQuery()
 
 	urlStr, err := Endpoint(*f.db.URL, "/_changes", params)
 	if err != nil {
@@ -107,17 +102,14 @@ func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
 	}
 
 	changes := make(chan *ChangeEvent, 1000)
-
-	go func(job *Job, changes chan<- *ChangeEvent) {
+	go func() {
 		defer job.Close()
-		defer close(changes)
+		defer close(f.stopped) // This lets consumers block until terminated
 
 		reader := bufio.NewReader(job.response.Body)
 
 		for {
 			select {
-			case <-f.quit:
-				return
 			default:
 				line, err := reader.ReadBytes('\n')
 				if err != nil {
@@ -134,7 +126,9 @@ func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
 
 					err := json.Unmarshal([]byte(lineStr), change)
 					if err == nil && len(change.Changes) == 1 {
-						f.lastEvent = time.Now()
+						// Save the sequence ID so that we can resume from the
+						// last processed event if asked to. The sequence ID will
+						// be null if we're between seq_intervals.
 						if change.Seq != "null" {
 							f.since = change.Seq
 						}
@@ -154,9 +148,11 @@ func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
 						}
 					}
 				}
+			case <-f.stop:
+				return
 			}
 		}
-	}(job, changes)
+	}()
 
 	return changes, nil
 }
