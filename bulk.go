@@ -9,17 +9,20 @@ import (
 	"time"
 )
 
+// BulkDocsRequest is the JSON body of a request to the _bulk_docs endpoint
 type BulkDocsRequest struct {
 	Docs []interface{} `json:"docs"`
 }
 
+// BulkDocsResponse is the JSON body of the response from the _bulk_docs endpoint
 type BulkDocsResponse struct {
 	Error  string `json:"error,omitempty"`
-	Id     string `json:"id"`
+	ID     string `json:"id"`
 	Reason string `json:"reason,omitempty"`
 	Rev    string `json:"rev,omitempty"`
 }
 
+// BulkJobI ...
 type BulkJobI interface {
 	getDoc() interface{}
 	isPriority() bool
@@ -27,6 +30,7 @@ type BulkJobI interface {
 	Wait()
 }
 
+// BulkJob represents the state of a single document to be uploaded as part of a batch
 type BulkJob struct {
 	doc      interface{}
 	Error    error
@@ -387,7 +391,7 @@ func uploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) (result *Job,
 	return
 }
 
-func getByFieldName(n interface{}, field_name string) (string, bool) {
+func getByFieldName(n interface{}, fieldName string) (string, bool) {
 	s := reflect.ValueOf(n)
 
 	if s.Kind() == reflect.Ptr {
@@ -398,7 +402,7 @@ func getByFieldName(n interface{}, field_name string) (string, bool) {
 		return "", false
 	}
 
-	f := s.FieldByName(field_name)
+	f := s.FieldByName(fieldName)
 	if !f.IsValid() {
 		return "", false
 	}
