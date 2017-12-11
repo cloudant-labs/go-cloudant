@@ -11,7 +11,8 @@ import (
 
 // BulkDocsRequest is the JSON body of a request to the _bulk_docs endpoint
 type BulkDocsRequest struct {
-	Docs []interface{} `json:"docs"`
+	Docs     []interface{} `json:"docs"`
+	NewEdits bool          `json:"new_edits"`
 }
 
 // BulkDocsResponse is the JSON body of the response from the _bulk_docs endpoint
@@ -89,6 +90,7 @@ func (j *bulkJobStop) Wait()               { <-j.isDone }
 type Uploader struct {
 	concurrency int
 	batchSize   int
+	NewEdits    bool
 	database    *Database
 	flushTicker *time.Ticker
 	uploadChan  chan BulkJobI
@@ -106,6 +108,7 @@ func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uplo
 		concurrency: database.client.workerCount,
 		batchSize:   batchSize,
 		database:    database,
+		NewEdits:    true,
 		flushTicker: flushTicker,
 		uploadChan:  make(chan BulkJobI, buffer),
 		workerChan:  make(chan chan BulkJobI, database.client.workerCount),
@@ -130,7 +133,7 @@ func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uplo
 
 // BulkUploadSimple does a one-shot synchronous bulk upload
 func (u *Uploader) BulkUploadSimple(docs []interface{}) ([]BulkDocsResponse, error) {
-	result, err := uploadBulkDocs(&BulkDocsRequest{docs}, u.database)
+	result, err := uploadBulkDocs(&BulkDocsRequest{docs, u.NewEdits}, u.database)
 	defer result.Close()
 
 	if err != nil || result == nil {
@@ -274,7 +277,10 @@ func (w *bulkWorker) flush() *bulkJobFlush {
 
 func (w *bulkWorker) start() {
 	go func() {
-		bulkDocs := &BulkDocsRequest{Docs: make([]interface{}, 0)}
+		bulkDocs := &BulkDocsRequest{
+			Docs:     make([]interface{}, 0),
+			NewEdits: w.uploader.NewEdits,
+		}
 		liveJobs := make([]*BulkJob, 0)
 
 		for {
@@ -322,10 +328,10 @@ func (w *bulkWorker) stop() *bulkJobStop {
 
 func processJobs(parent BulkJobI, jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
 	result, err := uploadBulkDocs(req, uploader.database)
-	processResult(parent, jobs, result, err)
+	processResult(parent, jobs, result, err, req.NewEdits)
 }
 
-func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error) {
+func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error, newEdits bool) {
 	defer func() {
 		result.Close()
 		doneAllJobs(jobs)
@@ -356,25 +362,32 @@ func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error) {
 		return
 	}
 
-	responses := make([]BulkDocsResponse, 0)
+	// Parse the responses.
+	//
+	// Due to a quirk in the CouchDB API, no results are returned if using
+	// new_edits=false. No, that makes no sense, and yes, this is not documented
+	// anywhere.
+	if newEdits {
+		responses := make([]BulkDocsResponse, 0)
 
-	err = json.NewDecoder(result.response.Body).Decode(&responses)
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to decode /_bulk_docs response, %s", err)
-		LogFunc(errMsg)
-		errorAllJobs(jobs, errMsg)
-		return
-	}
+		err = json.NewDecoder(result.response.Body).Decode(&responses)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to decode /_bulk_docs response, %s", err)
+			LogFunc(errMsg)
+			errorAllJobs(jobs, errMsg)
+			return
+		}
 
-	if len(jobs) != len(responses) {
-		LogFunc("unexpected response count: %d, expected: %d", len(responses), len(jobs))
-		return
-	}
+		if len(jobs) != len(responses) {
+			LogFunc("unexpected response count: %d, expected: %d", len(responses), len(jobs))
+			return
+		}
 
-	for i, job := range jobs {
-		job.Response = &responses[i]
-		if job.Response.Error != "" {
-			job.Error = fmt.Errorf("%s - %s", job.Response.Error, job.Response.Reason)
+		for i, job := range jobs {
+			job.Response = &responses[i]
+			if job.Response.Error != "" {
+				job.Error = fmt.Errorf("%s - %s", job.Response.Error, job.Response.Reason)
+			}
 		}
 	}
 }

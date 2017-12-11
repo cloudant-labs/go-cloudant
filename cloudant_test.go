@@ -1,6 +1,7 @@
 package cloudant
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -45,6 +46,47 @@ func TestBulkAsyncFlush(t *testing.T) {
 	}
 }
 
+func TestBulkNewEditsFalse(t *testing.T) {
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	defer func() {
+		fmt.Printf("Deleting database %s\n", database.Name)
+		database.client.Delete(database.Name)
+	}()
+
+	uploader := database.Bulk(5, 0)
+	uploader.NewEdits = false
+
+	// upload 5 documents
+	jobs := make([]*BulkJob, 5)
+	for i := 0; i < 5; i++ {
+		hash, _ := dbName()
+
+		jobs[i] = uploader.Upload(struct {
+			ID  string `json:"_id"`
+			Rev string `json:"_rev"`
+			Foo string `json:"foo"`
+		}{
+			fmt.Sprintf("doc-%d", i+1),
+			fmt.Sprintf("%d-%x", i+1, sha256.Sum256([]byte(hash))),
+			hash,
+		})
+	}
+
+	uploader.AsyncFlush()
+
+	for _, job := range jobs {
+		job.Wait()
+		if job.Error != nil {
+			t.Fatalf("%s", job.Error)
+		}
+		// new_edits=false returns no data, so can't assert based on returns
+	}
+}
+
 func TestBulkAsyncFlushTwoBatches(t *testing.T) {
 	database, err := makeDatabase()
 	if err != nil {
@@ -77,6 +119,10 @@ func TestBulkAsyncFlushTwoBatches(t *testing.T) {
 			t.Fatal("unexpected nil job response")
 		}
 
+		if job.Error != nil {
+			t.Fatalf("%s", job.Error)
+		}
+
 		if fmt.Sprintf("doc-%d", i+1) != job.Response.ID {
 			t.Errorf("unexpected job %d response id %s", i+1, job.Response.ID)
 		}
@@ -103,6 +149,10 @@ func TestBulkAsyncFlushTwoBatches(t *testing.T) {
 		job.Wait()
 		if job.Response == nil {
 			t.Fatal("unexpected nil job response")
+		}
+
+		if job.Error != nil {
+			t.Fatalf("%s", job.Error)
 		}
 
 		if fmt.Sprintf("doc-%d", i+1) != job.Response.ID {
@@ -140,6 +190,11 @@ func TestBulkPeriodicFlush(t *testing.T) {
 		if job.Response == nil {
 			t.Fatal("unexpected nil job response")
 		}
+
+		if job.Error != nil {
+			t.Fatalf("%s", job.Error)
+		}
+
 		if fmt.Sprintf("doc-%d", i+1) != job.Response.ID {
 			t.Errorf("unexpected job %d response id %s", i+1, job.Response.ID)
 		}
