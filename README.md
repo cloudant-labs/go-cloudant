@@ -23,7 +23,7 @@ go get github.ibm.com/cloudant/go-cloudant
 - Configurable request retrying
 - Hard limit on request concurrency
 - Stream `/_all_docs` & `/_changes`
-- Manage `_bulk_docs` uploads
+- Manage `/_bulk_docs` uploads
 
 ## Getting Started
 
@@ -115,13 +115,14 @@ myDoc3 := Doc{
         Foo:    "bar",
 }
 
-uploader := db.Bulk(50, 60) // new uploader using batch size 50, flushing documents to server every 60 seconds
+uploader := db.Bulk(50, 1048576, 60) // new uploader using batch size 50, max batch size 1MB, flushing documents to server every 60 seconds
 
-// Note: workers only flush their documents to the server:
-//  1)  periodically (set to 0 to disable)
-//  2)  when their batch size limit is reached.
-//  3)  if a document is uploaded using `.UploadNow(doc)`.
-//  4)  if a client calls `.Flush()` or `.Stop()`.
+// Note: workers only flush their document batch to the server:
+//  1)  periodically (set to -1 to disable).
+//  2)  when the maximum number of documents per batch is reached.
+//  3)  when the maximum batch size (in bytes) is reached (set to -1 to disable).
+//  4)  if a document is uploaded using `.UploadNow(doc)`.
+//  5)  if a client calls `.Flush()` or `.Stop()`.
 
 uploader.FireAndForget(myDoc1)
 

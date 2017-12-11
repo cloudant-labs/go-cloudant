@@ -20,7 +20,7 @@ func TestBulkAsyncFlush(t *testing.T) {
 		database.client.Delete(database.Name)
 	}()
 
-	uploader := database.Bulk(5, 0)
+	uploader := database.Bulk(5, -1, 0)
 
 	// upload 5 documents
 	jobs := make([]*BulkJob, 5)
@@ -57,7 +57,7 @@ func TestBulkNewEditsFalse(t *testing.T) {
 		database.client.Delete(database.Name)
 	}()
 
-	uploader := database.Bulk(5, 0)
+	uploader := database.Bulk(5, -1, 0)
 	uploader.NewEdits = false
 
 	// upload 5 documents
@@ -98,7 +98,7 @@ func TestBulkAsyncFlushTwoBatches(t *testing.T) {
 		database.client.Delete(database.Name)
 	}()
 
-	uploader := database.Bulk(5, 0)
+	uploader := database.Bulk(5, -1, 0)
 
 	// upload 5 documents
 	jobs := make([]*BulkJob, 5)
@@ -171,7 +171,7 @@ func TestBulkPeriodicFlush(t *testing.T) {
 		database.client.Delete(database.Name)
 	}()
 
-	uploader := database.Bulk(10, 10)
+	uploader := database.Bulk(10, -1, 10)
 
 	// upload 5 documents (a partial batch)
 	jobs := make([]*BulkJob, 5)
