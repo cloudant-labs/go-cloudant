@@ -49,7 +49,7 @@ func makeDatabase() (*Database, error) {
 }
 
 func makeDocuments(database *Database, docCount int) {
-	uploader := database.Bulk(docCount, 0)
+	uploader := database.Bulk(docCount, -1, 0)
 	for i := 0; i < docCount; i++ {
 		foo, _ := dbName()
 		uploader.Upload(cloudantDocument{

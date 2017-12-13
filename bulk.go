@@ -49,14 +49,14 @@ func newBulkJob(doc interface{}, priority bool) *BulkJob {
 	}
 }
 
-func doneAllJobs(jobs []*BulkJob) {
-	for _, j := range jobs {
+func doneAllJobs(jobs *[]*BulkJob) {
+	for _, j := range *jobs {
 		j.done()
 	}
 }
 
-func errorAllJobs(jobs []*BulkJob, errMessage string) {
-	for _, j := range jobs {
+func errorAllJobs(jobs *[]*BulkJob, errMessage string) {
+	for _, j := range *jobs {
 		j.Error = fmt.Errorf(errMessage)
 	}
 }
@@ -88,31 +88,33 @@ func (j *bulkJobStop) Wait()               { <-j.isDone }
 
 // Uploader is where Mr Smartypants live
 type Uploader struct {
-	concurrency int
-	batchSize   int
-	NewEdits    bool
-	database    *Database
-	flushTicker *time.Ticker
-	uploadChan  chan BulkJobI
-	workerChan  chan chan BulkJobI
-	workers     []*bulkWorker
+	concurrency   int
+	batchSize     int
+	batchMaxBytes int
+	NewEdits      bool
+	database      *Database
+	flushTicker   *time.Ticker
+	uploadChan    chan BulkJobI
+	workerChan    chan chan BulkJobI
+	workers       []*bulkWorker
 }
 
-func newUploader(database *Database, batchSize, buffer int, flushSecs int) *Uploader {
+func newUploader(database *Database, batchSize, batchMaxBytes, buffer int, flushSecs int) *Uploader {
 	var flushTicker *time.Ticker
 	if flushSecs > 0 {
 		flushTicker = time.NewTicker(time.Duration(flushSecs) * time.Second)
 	}
 
 	uploader := Uploader{
-		concurrency: database.client.workerCount,
-		batchSize:   batchSize,
-		database:    database,
-		NewEdits:    true,
-		flushTicker: flushTicker,
-		uploadChan:  make(chan BulkJobI, buffer),
-		workerChan:  make(chan chan BulkJobI, database.client.workerCount),
-		workers:     make([]*bulkWorker, 0),
+		concurrency:   database.client.workerCount,
+		batchSize:     batchSize,
+		batchMaxBytes: batchMaxBytes,
+		database:      database,
+		NewEdits:      true,
+		flushTicker:   flushTicker,
+		uploadChan:    make(chan BulkJobI, buffer),
+		workerChan:    make(chan chan BulkJobI, database.client.workerCount),
+		workers:       make([]*bulkWorker, 0),
 	}
 
 	if flushTicker != nil {
@@ -277,11 +279,14 @@ func (w *bulkWorker) flush() *bulkJobFlush {
 
 func (w *bulkWorker) start() {
 	go func() {
-		bulkDocs := &BulkDocsRequest{
-			Docs:     make([]interface{}, 0),
-			NewEdits: w.uploader.NewEdits,
+		liveJobs := make([]*BulkJob, 0, w.uploader.batchSize)
+
+		if w.uploader.batchMaxBytes < 0 {
+			w.uploader.batchMaxBytes = 0
 		}
-		liveJobs := make([]*BulkJob, 0)
+
+		bulkDocsBytes := make([]byte, 0, w.uploader.batchMaxBytes)
+		initBulkDocsReq(w.uploader.NewEdits, &bulkDocsBytes)
 
 		for {
 			w.uploader.workerChan <- w.jobChan
@@ -290,29 +295,26 @@ func (w *bulkWorker) start() {
 
 			switch j := job.(type) {
 			case *BulkJob:
-				bulkDocs.Docs = append(bulkDocs.Docs, j.getDoc())
-				liveJobs = append(liveJobs, j)
+				jsonDocBytes, err := json.Marshal(j.doc)
+				if err != nil {
+					j.Error = fmt.Errorf("invalid JSON - %s", err)
+					j.done()
+					break
+				}
 
-				if j.isPriority() || len(bulkDocs.Docs) >= w.uploader.batchSize {
-					processJobs(nil, liveJobs, bulkDocs, w.uploader)
-					bulkDocs.Docs = nil
-					liveJobs = nil
+				if j.isPriority() || len(liveJobs)+1 >= w.uploader.batchSize {
+					addDoc(j, &liveJobs, &jsonDocBytes, &bulkDocsBytes)
+					processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
+				} else {
+					if w.uploader.batchMaxBytes > 0 && len(bulkDocsBytes)+len(jsonDocBytes) > w.uploader.batchMaxBytes-2 { // -2bytes for closing JSON
+						processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
+					}
+					addDoc(j, &liveJobs, &jsonDocBytes, &bulkDocsBytes)
 				}
 			case *bulkJobFlush:
-				if len(bulkDocs.Docs) > 0 {
-					processJobs(j, liveJobs, bulkDocs, w.uploader)
-					bulkDocs.Docs = nil
-					liveJobs = nil
-				} else {
-					j.done()
-				}
+				processJobs(w.uploader.NewEdits, j, &liveJobs, &bulkDocsBytes, w.uploader)
 			case *bulkJobStop:
-				if len(bulkDocs.Docs) > 0 {
-					processJobs(j, liveJobs, bulkDocs, w.uploader)
-				} else {
-					j.done()
-				}
-
+				processJobs(w.uploader.NewEdits, j, &liveJobs, &bulkDocsBytes, w.uploader)
 				return
 			}
 		}
@@ -326,12 +328,45 @@ func (w *bulkWorker) stop() *bulkJobStop {
 	return job
 }
 
-func processJobs(parent BulkJobI, jobs []*BulkJob, req *BulkDocsRequest, uploader *Uploader) {
-	result, err := uploadBulkDocs(req, uploader.database)
-	processResult(parent, jobs, result, err, req.NewEdits)
+func initBulkDocsReq(isNewEdits bool, bulkDocsBytes *[]byte) {
+	if isNewEdits {
+		*bulkDocsBytes = append(*bulkDocsBytes, 123, 34, 110, 101, 119, 95, 101, 100, 105, 116, 115, 34, 58, 116, 114, 117, 101, 44, 34, 100, 111, 99, 115, 34, 58, 91) // add {"new_edits":true,"docs":[
+	} else {
+		*bulkDocsBytes = append(*bulkDocsBytes, 123, 34, 100, 111, 99, 115, 34, 58, 91) // add '{"docs":['
+	}
 }
 
-func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error, newEdits bool) {
+func addDoc(job *BulkJob, liveJobs *[]*BulkJob, jsonDocBytes *[]byte, bulkDocsBytes *[]byte) {
+	*liveJobs = append(*liveJobs, job)
+
+	if len(*liveJobs) > 1 {
+		*bulkDocsBytes = append(*bulkDocsBytes, 44) // add comma separator
+	}
+
+	*bulkDocsBytes = append(*bulkDocsBytes, *jsonDocBytes...)
+}
+
+func processJobs(isNewEdits bool, parent BulkJobI, jobs *[]*BulkJob, bulkDocsBytes *[]byte, uploader *Uploader) {
+	if len(*jobs) == 0 {
+		if parent != nil {
+			parent.done()
+		}
+		return
+	}
+
+	*bulkDocsBytes = append(*bulkDocsBytes, 93, 125) // add ']}'
+	b := bytes.NewReader(*bulkDocsBytes)
+	result, err := uploader.database.client.request("POST", uploader.database.URL.String()+"/_bulk_docs", b)
+
+	processResult(parent, jobs, result, err, isNewEdits)
+
+	*bulkDocsBytes = nil
+	*jobs = nil
+
+	initBulkDocsReq(isNewEdits, bulkDocsBytes)
+}
+
+func processResult(parent BulkJobI, jobs *[]*BulkJob, result *Job, err error, isNewEdits bool) {
 	defer func() {
 		result.Close()
 		doneAllJobs(jobs)
@@ -367,7 +402,7 @@ func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error, new
 	// Due to a quirk in the CouchDB API, no results are returned if using
 	// new_edits=false. No, that makes no sense, and yes, this is not documented
 	// anywhere.
-	if newEdits {
+	if isNewEdits {
 		responses := make([]BulkDocsResponse, 0)
 
 		err = json.NewDecoder(result.response.Body).Decode(&responses)
@@ -378,12 +413,12 @@ func processResult(parent BulkJobI, jobs []*BulkJob, result *Job, err error, new
 			return
 		}
 
-		if len(jobs) != len(responses) {
-			LogFunc("unexpected response count: %d, expected: %d", len(responses), len(jobs))
+		if len(*jobs) != len(responses) {
+			LogFunc("unexpected response count: %d, expected: %d", len(responses), len(*jobs))
 			return
 		}
 
-		for i, job := range jobs {
+		for i, job := range *jobs {
 			job.Response = &responses[i]
 			if job.Response.Error != "" {
 				job.Error = fmt.Errorf("%s - %s", job.Response.Error, job.Response.Reason)
