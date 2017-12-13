@@ -4,10 +4,29 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestInvalidLogin(t *testing.T) {
+	username := os.Getenv("COUCH_USER")
+	password := "wR0ng_pa$$w0rd"
+
+	if username == "" {
+		t.Fatalf("expected env var COUCH_USER to be set")
+	}
+
+	_, err := CreateClient(username, password, "https://"+username+".cloudant.com", 5)
+
+	if err == nil {
+		t.Errorf("missing error from invalid login attempt")
+	}
+	if err.Error() != "failed to create session, status 401" {
+		t.Errorf("unexpected error message: %s", err)
+	}
+}
 
 func TestBulkAsyncFlush(t *testing.T) {
 	database, err := makeDatabase()
