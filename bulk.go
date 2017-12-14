@@ -302,14 +302,17 @@ func (w *bulkWorker) start() {
 					break
 				}
 
-				if j.isPriority() || len(liveJobs)+1 >= w.uploader.batchSize {
-					addDoc(j, &liveJobs, &jsonDocBytes, &bulkDocsBytes)
+				if w.uploader.batchMaxBytes > 0 && len(bulkDocsBytes)+len(jsonDocBytes) > w.uploader.batchMaxBytes-2 {
 					processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
-				} else {
-					if w.uploader.batchMaxBytes > 0 && len(bulkDocsBytes)+len(jsonDocBytes) > w.uploader.batchMaxBytes-2 { // -2bytes for closing JSON
-						processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
-					}
-					addDoc(j, &liveJobs, &jsonDocBytes, &bulkDocsBytes)
+				}
+				if len(liveJobs) >= w.uploader.batchSize {
+					processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
+				}
+
+				addDoc(j, &liveJobs, &jsonDocBytes, &bulkDocsBytes)
+
+				if j.isPriority() {
+					processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
 				}
 			case *bulkJobFlush:
 				processJobs(w.uploader.NewEdits, j, &liveJobs, &bulkDocsBytes, w.uploader)
@@ -347,18 +350,25 @@ func addDoc(job *BulkJob, liveJobs *[]*BulkJob, jsonDocBytes *[]byte, bulkDocsBy
 }
 
 func processJobs(isNewEdits bool, parent BulkJobI, jobs *[]*BulkJob, bulkDocsBytes *[]byte, uploader *Uploader) {
-	if len(*jobs) == 0 {
+	defer func() {
 		if parent != nil {
 			parent.done()
 		}
+	}()
+
+	if len(*jobs) == 0 {
 		return
 	}
 
 	*bulkDocsBytes = append(*bulkDocsBytes, 93, 125) // add ']}'
-	b := bytes.NewReader(*bulkDocsBytes)
-	result, err := uploader.database.client.request("POST", uploader.database.URL.String()+"/_bulk_docs", b)
 
-	processResult(parent, jobs, result, err, isNewEdits)
+	if uploader.batchMaxBytes > 0 && len(*bulkDocsBytes) > uploader.batchMaxBytes {
+		errorAllJobs(jobs, "payload too large")
+	} else {
+		b := bytes.NewReader(*bulkDocsBytes)
+		result, err := uploader.database.client.request("POST", uploader.database.URL.String()+"/_bulk_docs", b)
+		processResult(jobs, result, err, isNewEdits)
+	}
 
 	*bulkDocsBytes = nil
 	*jobs = nil
@@ -366,14 +376,9 @@ func processJobs(isNewEdits bool, parent BulkJobI, jobs *[]*BulkJob, bulkDocsByt
 	initBulkDocsReq(isNewEdits, bulkDocsBytes)
 }
 
-func processResult(parent BulkJobI, jobs *[]*BulkJob, result *Job, err error, isNewEdits bool) {
-	defer func() {
-		result.Close()
-		doneAllJobs(jobs)
-		if parent != nil {
-			parent.done()
-		}
-	}()
+func processResult(jobs *[]*BulkJob, result *Job, err error, isNewEdits bool) {
+	defer result.Close()
+	defer doneAllJobs(jobs)
 
 	if err != nil || result == nil {
 		errMsg := fmt.Sprint("bulk upload error", err)
