@@ -96,7 +96,10 @@ func CreateClientWithRetry(username, password, rootStrURL string, concurrency, r
 
 	startDispatcher(&couchClient) // start workers
 
-	couchClient.LogIn() // create initial session
+	err = couchClient.LogIn() // create initial session
+	if err != nil {
+		return nil, err
+	}
 
 	return &couchClient, nil
 }
@@ -206,11 +209,17 @@ func (c *CouchClient) LogIn() error {
 	job := CreateJob(req)
 	defer job.Close()
 
+	job.isLogin = true // don't retry login on 401
+
 	c.Execute(job)
 	job.Wait() // wait for job to complete
 
 	if job.error != nil {
 		return job.error
+	}
+
+	if job.response.StatusCode != 200 {
+		return fmt.Errorf("failed to create session, status %d", job.response.StatusCode)
 	}
 
 	return nil // success

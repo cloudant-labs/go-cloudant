@@ -31,6 +31,7 @@ type Job struct {
 	retryCount int
 	error      error
 	isDone     chan bool
+	isLogin    bool
 }
 
 // Convenience function to check a response for errors
@@ -57,6 +58,7 @@ func CreateJob(request *http.Request) *Job {
 		response: nil,
 		error:    nil,
 		isDone:   make(chan bool, 1), // mark as done is non-blocking for worker
+		isLogin:  false,
 	}
 
 	return job
@@ -130,11 +132,11 @@ func (w *worker) start() {
 			} else {
 				switch resp.StatusCode {
 				case 401:
-					// [SK] If the creds are wrong, this will spin. Maybe that's
-					// what we want?
-					LogFunc("renewing session")
-					w.client.LogIn()
-					retry = true
+					if !job.isLogin {
+						LogFunc("renewing session")
+						w.client.LogIn()
+						retry = true
+					}
 				case 403:
 					response := &CredentialsExpiredResponse{}
 					err = json.NewDecoder(resp.Body).Decode(response)
