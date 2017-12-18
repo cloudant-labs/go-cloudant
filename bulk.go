@@ -302,10 +302,7 @@ func (w *bulkWorker) start() {
 					break
 				}
 
-				if w.uploader.batchMaxBytes > 0 && len(bulkDocsBytes)+len(jsonDocBytes) > w.uploader.batchMaxBytes-2 {
-					processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
-				}
-				if len(liveJobs) >= w.uploader.batchSize {
+				if len(liveJobs) >= w.uploader.batchSize || (w.uploader.batchMaxBytes > 0 && len(bulkDocsBytes)+len(jsonDocBytes) > w.uploader.batchMaxBytes-2) {
 					processJobs(w.uploader.NewEdits, nil, &liveJobs, &bulkDocsBytes, w.uploader)
 				}
 
