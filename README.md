@@ -224,6 +224,8 @@ if err != nil {
     return
 }
 
+follower.heartbeat = 100
+
 for {
     changeEvent := <-changes
 

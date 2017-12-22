@@ -37,6 +37,9 @@ type Follower struct {
 	stopped     chan struct{}
 	since       string
 	seqInterval int
+	timeout     int
+	includeDocs bool
+	heartbeat   int
 }
 
 // eventType tries to classify the current event as insert, delete or update.
@@ -72,16 +75,19 @@ func (f *Follower) Close() {
 // Follow starts listening to the changes feed
 func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
 	query := NewChangesQuery().
-		IncludeDocs().
 		Feed("continuous").
 		Since(f.since).
-		Heartbeat(10).
-		Timeout(30)
+		Style("all_docs").
+		Heartbeat(f.heartbeat).
+		Timeout(f.timeout)
 
 	if f.seqInterval > 0 {
 		query = query.SeqInterval(f.seqInterval)
 	}
 
+	if f.includeDocs {
+		query = query.IncludeDocs()
+	}
 	params, _ := query.Build().GetQuery()
 
 	urlStr, err := Endpoint(*f.db.URL, "/_changes", params)
