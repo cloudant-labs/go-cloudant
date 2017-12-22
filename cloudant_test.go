@@ -79,18 +79,25 @@ func TestBulkNewEditsFalse(t *testing.T) {
 	uploader := database.Bulk(5, -1, 0)
 	uploader.NewEdits = false
 
+	myRevs := map[string]string{}
+
 	// upload 5 documents
 	jobs := make([]*BulkJob, 5)
 	for i := 0; i < 5; i++ {
 		hash, _ := dbName()
+
+		docID := fmt.Sprintf("doc-%d", i+1)
+		revID := fmt.Sprintf("%d-%x", i+1, sha256.Sum256([]byte(hash)))
+
+		myRevs[docID] = revID
 
 		jobs[i] = uploader.Upload(struct {
 			ID  string `json:"_id"`
 			Rev string `json:"_rev"`
 			Foo string `json:"foo"`
 		}{
-			fmt.Sprintf("doc-%d", i+1),
-			fmt.Sprintf("%d-%x", i+1, sha256.Sum256([]byte(hash))),
+			docID,
+			revID,
 			hash,
 		})
 	}
@@ -103,6 +110,25 @@ func TestBulkNewEditsFalse(t *testing.T) {
 			t.Fatalf("%s", job.Error)
 		}
 		// new_edits=false returns no data, so can't assert based on returns
+	}
+
+	time.Sleep(5 * time.Second) // allow primary index to update
+
+	rows, err := database.All(NewAllDocsQuery().Build())
+	foundRevs := map[string]string{}
+	for {
+		row, more := <-rows
+		if more {
+			if r, ok := myRevs[row.ID]; ok && r == row.Value.Rev {
+				foundRevs[row.ID] = row.Value.Rev
+			}
+		} else {
+			break
+		}
+	}
+
+	if len(foundRevs) != len(myRevs) {
+		t.Fatalf("Expected %d written docs, found %d", len(myRevs), len(foundRevs))
 	}
 }
 
