@@ -330,9 +330,9 @@ func (w *bulkWorker) stop() *bulkJobStop {
 
 func initBulkDocsReq(isNewEdits bool, bulkDocsBytes *[]byte) {
 	if isNewEdits {
-		*bulkDocsBytes = append(*bulkDocsBytes, 123, 34, 110, 101, 119, 95, 101, 100, 105, 116, 115, 34, 58, 116, 114, 117, 101, 44, 34, 100, 111, 99, 115, 34, 58, 91) // add {"new_edits":true,"docs":[
-	} else {
 		*bulkDocsBytes = append(*bulkDocsBytes, 123, 34, 100, 111, 99, 115, 34, 58, 91) // add '{"docs":['
+	} else {
+		*bulkDocsBytes = append(*bulkDocsBytes, 123, 34, 110, 101, 119, 95, 101, 100, 105, 116, 115, 34, 58, 102, 97, 108, 115, 101, 44, 34, 100, 111, 99, 115, 34, 58, 91) // add '{"new_edits":false,"docs":['
 	}
 }
 
