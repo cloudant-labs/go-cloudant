@@ -1,10 +1,16 @@
 package cloudant
 
+// This implements some of the replication-specific endpoints of the CouchDB API.
+//
+// http://docs.couchdb.org/en/2.1.1/replication/protocol.html#couchdb-replication-protocol
+//
+
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sync"
 )
 
 // LogHistoryRow ...
@@ -65,9 +71,10 @@ type ReplicationLog struct {
 	SourceLastSeq        int             `json:"source_last_seq"`
 }
 
-// RevsDiffRequestBody ...
+// RevsDiffRequestBody maps ids to lists of revs
 type RevsDiffRequestBody map[string][]string
 
+// Add adds an {id, rev} pair to a _revs_diff request
 func (r *RevsDiffRequestBody) Add(ID, rev string) {
 	if _, ok := (*r)[ID]; ok {
 		(*r)[ID] = append((*r)[ID], rev)
@@ -76,14 +83,15 @@ func (r *RevsDiffRequestBody) Add(ID, rev string) {
 	}
 }
 
-// RevsDiffResponse ...
+// RevsDiffResponse maps ids to missing revs
 type RevsDiffResponse map[string]struct {
 	Missing []string `json:"missing"`
 }
 
 // GetReplicationLog fetches the replication log from the local
 // document given by `docID`. The `_local/` prefix will be added.
-// NOTE SHOULD BE DATABASE NOT CLIENT
+//
+// http://docs.couchdb.org/en/2.1.1/replication/protocol.html#retrieve-replication-logs-from-source-and-target
 func (d *Database) GetReplicationLog(docID string) (*ReplicationLog, error) {
 	urlStr, err := Endpoint(*d.URL, fmt.Sprintf("/_local/%s", docID), url.Values{})
 	if err != nil {
@@ -148,7 +156,10 @@ func (l *ReplicationLog) FindCommonAncestry(target *ReplicationLog) (string, boo
 	return lastSharedID, true
 }
 
-// RevsDiff ...
+// RevsDiff when given a set of document/revision IDs, returns the subset of those
+// that do not correspond to revisions stored in the database.
+//
+// http://docs.couchdb.org/en/2.1.1/api/database/misc.html#db-revs-diff
 func (d Database) RevsDiff(body *RevsDiffRequestBody) (*RevsDiffResponse, error) {
 	urlStr, err := Endpoint(*d.URL, "/_revs_diff", url.Values{})
 	if err != nil {
@@ -187,6 +198,8 @@ func (d Database) RevsDiff(body *RevsDiffRequestBody) (*RevsDiffResponse, error)
 }
 
 // EnsureFullCommit ...
+//
+// http://docs.couchdb.org/en/2.1.1/replication/protocol.html#ensure-in-commit
 func (d Database) EnsureFullCommit() (*EnsureFullCommitResponse, error) {
 	urlStr, err := Endpoint(*d.URL, "/_ensure_full_commit", url.Values{})
 	if err != nil {
@@ -218,14 +231,18 @@ func (d Database) EnsureFullCommit() (*EnsureFullCommitResponse, error) {
 	return ensureFullCommitResponse, nil
 }
 
-// ReplicateTo ...
-// see http://jmoiron.net/blog/limiting-concurrency-in-go/
+// ReplicateTo implements the CouchDB replication algorithm from the receiver
+// to `destination`. `batchSize` sets the max number of documents to bulk load
+// to the destination, and also determines the seq_interval for the source
+// changes feed. The `concurrency` parameter sets the max number of concurrent
+// batches to process.
 func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency int) error {
 
 	follower := NewFollower(d, batchSize)
 	follower.heartbeat = 10000
 
 	uploader := destination.Bulk(batchSize, 1048576, 60)
+	uploader.NewEdits = false // upload in replicator mode to preserve source revs
 
 	changes, err := follower.Follow()
 	if err != nil {
@@ -234,7 +251,17 @@ func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency
 
 	batch := []*ChangeEvent{}
 
+	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrency)
+	defer func() {
+		// Ensure we drain the queue of any pending batches
+		for i := 0; i < cap(sem); i++ {
+			sem <- struct{}{}
+		}
+		// Trigger and wait for any upload workers that hold queued docs
+		wg.Wait()
+		uploader.Flush()
+	}()
 
 CHANGES:
 	for {
@@ -249,18 +276,19 @@ CHANGES:
 			batch = append(batch, changeEvent)
 			if len(batch) >= batchSize {
 				sem <- struct{}{}
-				go d.handleChangesBatch(destination, batch, uploader, sem)
+				go d.handleChangesBatch(destination, batch, uploader, sem, &wg)
 			}
 			batch = []*ChangeEvent{}
 		}
 	}
-	for i := 0; i < cap(sem); i++ {
-		sem <- struct{}{}
-	}
+
 	return nil
 }
 
-// BulkGet ...
+// BulkGet fetches many docs with their respective open revisions in one go.
+//
+// https://github.com/apache/couchdb-chttpd/pull/33
+// https://pouchdb.com/api.html#bulk_get
 func (d Database) BulkGet(body *BulkGetRequest, revs bool) (*BulkGetResponse, error) {
 	params := url.Values{}
 	if revs {
@@ -304,9 +332,12 @@ func (d Database) BulkGet(body *BulkGetRequest, revs bool) (*BulkGetResponse, er
 
 // handleChangesBatch -- main part of the replication
 // Note: how does this deal with deletions
-func (d Database) handleChangesBatch(destination *Database, changes []*ChangeEvent, bulker *Uploader, sem chan struct{}) error {
+func (d Database) handleChangesBatch(destination *Database, changes []*ChangeEvent, bulker *Uploader, sem chan struct{}, wg *sync.WaitGroup) error {
 	// 1. RevsDiff the batch against the destination DB
+	wg.Add(1)
 	defer func() { <-sem }()
+	defer wg.Done() // must be executed *before* the semaphore read, hence after on the defer stack
+
 	rd := &RevsDiffRequestBody{}
 	for _, ch := range changes {
 		rd.Add(ch.Meta.ID, ch.Meta.Rev)
@@ -317,7 +348,7 @@ func (d Database) handleChangesBatch(destination *Database, changes []*ChangeEve
 		return err
 	}
 
-	// Fetch all missing bodies
+	// Fetch any missing revs
 	reqBody := &BulkGetRequest{}
 	for ID, revs := range *missing {
 		for _, rev := range revs.Missing {
@@ -333,7 +364,7 @@ func (d Database) handleChangesBatch(destination *Database, changes []*ChangeEve
 	// Bulk load in batches to destination
 	for _, item := range resp.Results {
 		for _, doc := range item.Docs {
-			bulker.Upload(doc.OK) // NOTE: new_edits: false
+			bulker.Upload(doc.OK)
 		}
 	}
 
