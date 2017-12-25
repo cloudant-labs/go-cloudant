@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"sync"
 )
 
 // LogHistoryRow ...
@@ -220,7 +219,8 @@ func (d Database) EnsureFullCommit() (*EnsureFullCommitResponse, error) {
 }
 
 // ReplicateTo ...
-func (d *Database) ReplicateTo(destination *Database, batchSize int) error {
+// see http://jmoiron.net/blog/limiting-concurrency-in-go/
+func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency int) error {
 
 	follower := NewFollower(d, batchSize)
 	follower.heartbeat = 10000
@@ -233,8 +233,8 @@ func (d *Database) ReplicateTo(destination *Database, batchSize int) error {
 	}
 
 	batch := []*ChangeEvent{}
-	var wg sync.WaitGroup
-	defer wg.Wait()
+
+	sem := make(chan struct{}, concurrency)
 
 CHANGES:
 	for {
@@ -248,10 +248,14 @@ CHANGES:
 		default:
 			batch = append(batch, changeEvent)
 			if len(batch) >= batchSize {
-				go d.handleChangesBatch(destination, batch, uploader, &wg)
+				sem <- struct{}{}
+				go d.handleChangesBatch(destination, batch, uploader, sem)
 			}
 			batch = []*ChangeEvent{}
 		}
+	}
+	for i := 0; i < cap(sem); i++ {
+		sem <- struct{}{}
 	}
 	return nil
 }
@@ -300,11 +304,11 @@ func (d Database) BulkGet(body *BulkGetRequest, revs bool) (*BulkGetResponse, er
 
 // handleChangesBatch -- main part of the replication
 // Note: how does this deal with deletions
-func (d Database) handleChangesBatch(destination *Database, chEvs []*ChangeEvent, bulker *Uploader, wg *sync.WaitGroup) error {
+func (d Database) handleChangesBatch(destination *Database, changes []*ChangeEvent, bulker *Uploader, sem chan struct{}) error {
 	// 1. RevsDiff the batch against the destination DB
-	wg.Add(1)
+	defer func() { <-sem }()
 	rd := &RevsDiffRequestBody{}
-	for _, ch := range chEvs {
+	for _, ch := range changes {
 		rd.Add(ch.Meta.ID, ch.Meta.Rev)
 	}
 
@@ -332,8 +336,6 @@ func (d Database) handleChangesBatch(destination *Database, chEvs []*ChangeEvent
 			bulker.Upload(doc.OK) // NOTE: new_edits: false
 		}
 	}
-
-	wg.Done()
 
 	return nil
 }
