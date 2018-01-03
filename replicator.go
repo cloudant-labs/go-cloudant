@@ -7,10 +7,14 @@ package cloudant
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"sync"
+	"time"
 )
 
 // LogHistoryRow ...
@@ -18,7 +22,7 @@ type LogHistoryRow struct {
 	DocWriteFailures int    `json:"doc_write_failures,omitempty"` // Number of failed writes
 	DocsRead         int    `json:"docs_read,omitempty"`          // Number of read documents
 	DocsWritten      int    `json:"docs_written,omitempty"`       // Number of written documents
-	EndLastSeq       int    `json:"end_last_seq,omitempty"`       // Last processed Update Sequence ID
+	EndLastSeq       string `json:"end_last_seq,omitempty"`       // Last processed Update Sequence ID
 	EndTime          string `json:"end_time,omitempty"`           // Replication completion timestamp in RFC 5322 format
 	MissingChecked   int    `json:"missing_checked,omitempty"`    // Number of checked revisions on Source
 	MissingFound     int    `json:"missing_found,omitempty"`      // Number of missing revisions found on Target
@@ -57,18 +61,12 @@ func (b *BulkGetRequest) Add(ID, rev string) {
 	})
 }
 
-// EnsureFullCommitResponse ...
-type EnsureFullCommitResponse struct {
-	InstanceStartTime string `json:"instance_start_time"`
-	OK                bool   `json:"ok"`
-}
-
 // ReplicationLog ...
 type ReplicationLog struct {
 	History              []LogHistoryRow `json:"history"`
 	ReplicationIDVersion int             `json:"replication_id_version"`
 	SessionID            string          `json:"session_id"`
-	SourceLastSeq        int             `json:"source_last_seq"`
+	SourceLastSeq        string          `json:"source_last_seq"`
 }
 
 // RevsDiffRequestBody maps ids to lists of revs
@@ -123,37 +121,91 @@ func (d *Database) GetReplicationLog(docID string) (*ReplicationLog, error) {
 	return replicationLog, nil
 }
 
-// FindCommonAncestry finds the most recent shared `session_id`
+// WriteReplicationLog writes the replication log to the local
+// document given by `docID`. The `_local/` prefix will be added.
+//
+func (d *Database) WriteReplicationLog(docID string, newLogEntry LogHistoryRow) error {
+	urlStr, err := Endpoint(*d.URL, fmt.Sprintf("/_local/%s", docID), url.Values{})
+	if err != nil {
+		return err
+	}
+
+	job, err := d.client.request("GET", urlStr, nil)
+	defer func() {
+		if job != nil {
+			job.Close()
+		}
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	err = expectedReturnCodes(job, 200)
+	if err != nil {
+		return err
+	}
+
+	replicationLog := &ReplicationLog{}
+	err = json.NewDecoder(job.response.Body).Decode(replicationLog)
+	if err != nil {
+		return err
+	}
+
+	replicationLog.History = append([]LogHistoryRow{newLogEntry}, replicationLog.History...)
+
+	jsonData, err := json.Marshal(replicationLog)
+	if err != nil {
+		return err
+	}
+
+	b := bytes.NewReader(jsonData)
+
+	save, err := d.client.request("POST", urlStr, b)
+	defer func() {
+		if save != nil {
+			save.Close()
+		}
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	err = expectedReturnCodes(save, 200)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// FindCommonAncestry finds the most recent shared `session_id` and returns the
+// corresponsing sequence id.
+//
 // See:
 // http://docs.couchdb.org/en/2.1.1/replication/protocol.html#compare-replication-logs
 //
-// Returns either the most recent shared session_id or an empty string and false
-// if no shared ancestry is found.
-//
-// Not sure how the `recorded_seq` fits in -- it should be an intermediate save point
+// Returns either the sequence id corresponding to the most recent shared
+// session_id or an empty string and false if no shared ancestry is found.
 func (l *ReplicationLog) FindCommonAncestry(target *ReplicationLog) (string, bool) {
-	targetHistoryLen := len(target.History)
-	if l.SourceLastSeq < targetHistoryLen && l.SourceLastSeq < len(l.History) {
-		if l.History[l.SourceLastSeq].SessionID == target.History[l.SourceLastSeq].SessionID {
-			return l.History[l.SourceLastSeq].SessionID, true
+	// Happy path: the recorded last sequence id is for the same session
+	if l.SessionID == target.SessionID {
+		return l.SourceLastSeq, true
+	}
+
+	// Otherwise, examine the history array from the top (should be reverse chron)
+	// and select the first item that has a corresponding session id at the target.
+	for _, sourceRow := range l.History {
+		for _, targetRow := range target.History {
+			if targetRow.SessionID == sourceRow.SessionID {
+				return sourceRow.RecordedSeq, true
+			}
 		}
 	}
 
-	lastSharedID := ""
-	for i := 0; i < len(l.History); i++ {
-		if i >= targetHistoryLen {
-			break
-		}
-		if l.History[i].SessionID == target.History[i].SessionID {
-			lastSharedID = l.History[i].SessionID
-		}
-	}
-
-	if lastSharedID == "" {
-		return "", false
-	}
-
-	return lastSharedID, true
+	// No shared ancestry found.
+	return "", false
 }
 
 // RevsDiff when given a set of document/revision IDs, returns the subset of those
@@ -197,92 +249,12 @@ func (d Database) RevsDiff(body *RevsDiffRequestBody) (*RevsDiffResponse, error)
 	return revsDiffResponse, nil
 }
 
-// EnsureFullCommit ...
-//
-// http://docs.couchdb.org/en/2.1.1/replication/protocol.html#ensure-in-commit
-func (d Database) EnsureFullCommit() (*EnsureFullCommitResponse, error) {
-	urlStr, err := Endpoint(*d.URL, "/_ensure_full_commit", url.Values{})
-	if err != nil {
-		return nil, err
-	}
-
-	job, err := d.client.request("POST", urlStr, nil)
-	defer func() {
-		if job != nil {
-			job.done()
-		}
-	}()
-
-	if err != nil {
-		return nil, err
-	}
-
-	err = expectedReturnCodes(job, 200)
-	if err != nil {
-		return nil, err
-	}
-
-	ensureFullCommitResponse := &EnsureFullCommitResponse{}
-	err = json.NewDecoder(job.response.Body).Decode(ensureFullCommitResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	return ensureFullCommitResponse, nil
-}
-
-// ReplicateTo implements the CouchDB replication algorithm from the receiver
-// to `destination`. `batchSize` sets the max number of documents to bulk load
-// to the destination, and also determines the seq_interval for the source
-// changes feed. The `concurrency` parameter sets the max number of concurrent
-// batches to process.
-func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency int) error {
-
-	follower := NewFollower(d, batchSize)
-	follower.heartbeat = 10000
-
-	uploader := destination.Bulk(batchSize, 1048576, 60)
-	uploader.NewEdits = false // upload in replicator mode to preserve source revs
-
-	changes, err := follower.Follow()
-	if err != nil {
-		return err
-	}
-
-	batch := []*ChangeEvent{}
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, concurrency)
-	defer func() {
-		// Ensure we drain the queue of any pending batches
-		for i := 0; i < cap(sem); i++ {
-			sem <- struct{}{}
-		}
-		// Trigger and wait for any upload workers that hold queued docs
-		wg.Wait()
-		uploader.Flush()
-	}()
-
-CHANGES:
-	for {
-		changeEvent := <-changes
-
-		switch changeEvent.EventType {
-		case ChangesHeartbeat:
-		case ChangesError:
-		case ChangesTerminated:
-			break CHANGES
-		default:
-			batch = append(batch, changeEvent)
-			if len(batch) >= batchSize {
-				sem <- struct{}{}
-				go d.handleChangesBatch(destination, batch, uploader, sem, &wg)
-			}
-			batch = []*ChangeEvent{}
-		}
-	}
-
-	return nil
+// GenerateReplicationID uniquely identifies a replication from the receiver
+// to the destination. This is potentially too simplistic.
+// See http://docs.couchdb.org/en/2.1.1/replication/protocol.html#generate-replication-id
+func (d *Database) GenerateReplicationID(destination *Database) string {
+	str := fmt.Sprintf("%s-%s", d.URL.String(), destination.URL.String())
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(str)))
 }
 
 // BulkGet fetches many docs with their respective open revisions in one go.
@@ -330,25 +302,132 @@ func (d Database) BulkGet(body *BulkGetRequest, revs bool) (*BulkGetResponse, er
 	return resp, nil
 }
 
-// handleChangesBatch -- main part of the replication
-// Note: how does this deal with deletions
-func (d Database) handleChangesBatch(destination *Database, changes []*ChangeEvent, bulker *Uploader, sem chan struct{}, wg *sync.WaitGroup) error {
-	// 1. RevsDiff the batch against the destination DB
-	wg.Add(1)
-	defer func() { <-sem }()
-	defer wg.Done() // must be executed *before* the semaphore read, hence after on the defer stack
+func uuid() (string, error) {
+	uuid := make([]byte, 16)
+	n, err := io.ReadFull(rand.Reader, uuid)
+	if n != len(uuid) || err != nil {
+		return "", err
+	}
+	uuid[8] = uuid[8]&^0xc0 | 0x80
+	uuid[6] = uuid[6]&^0xf0 | 0x40
 
-	rd := &RevsDiffRequestBody{}
-	for _, ch := range changes {
-		rd.Add(ch.Meta.ID, ch.Meta.Rev)
+	return fmt.Sprintf("%x%x%x%x%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
+}
+
+// ReplicateTo implements the CouchDB replication algorithm from the receiver
+// to `destination`. `batchSize` sets the max number of documents to bulk load
+// to the destination, and also determines the seq_interval for the source
+// changes feed. The `concurrency` parameter sets the max number of concurrent
+// batches to process.
+func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency int) error {
+
+	replicationID := d.GenerateReplicationID(destination)
+	sourceLog, err := d.GetReplicationLog(replicationID)
+	destLog, err := destination.GetReplicationLog(replicationID)
+
+	follower := NewFollower(d, batchSize)
+	follower.heartbeat = 10000
+	if since, ok := sourceLog.FindCommonAncestry(destLog); ok {
+		follower.since = since
 	}
 
-	missing, err := destination.RevsDiff(rd)
+	uploader := destination.Bulk(batchSize, 1048576, 60)
+	uploader.NewEdits = false // upload in replicator mode to preserve source revs
+
+	changes, err := follower.Follow()
 	if err != nil {
 		return err
 	}
 
-	// Fetch any missing revs
+	batch := []*ChangeEvent{}
+
+	errChan := make(chan error, 1)
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, concurrency)
+	defer func() {
+		// Ensure we drain the queue of any pending batches
+		for i := 0; i < cap(sem); i++ {
+			sem <- struct{}{}
+		}
+		// Trigger and wait for any upload workers that hold queued docs
+		wg.Wait()
+		uploader.Flush()
+		close(errChan)
+	}()
+
+CHANGES:
+	for {
+		select {
+		case err = <-errChan:
+			LogFunc(fmt.Sprintf("replicator error, %s", err))
+		case changeEvent := <-changes:
+			switch changeEvent.EventType {
+			case ChangesHeartbeat:
+			case ChangesError:
+				LogFunc(fmt.Sprintf("changes error, %s", changeEvent.Err))
+			case ChangesTerminated:
+				break CHANGES
+			default:
+				batch = append(batch, changeEvent)
+				if len(batch) >= batchSize {
+					sem <- struct{}{}
+					go d.handleChangesBatch(
+						destination,
+						batch,
+						uploader,
+						replicationID,
+						errChan,
+						sem,
+						&wg,
+					)
+					batch = []*ChangeEvent{}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// handleChangesBatch -- main part of the replication
+func (d Database) handleChangesBatch(
+	destination *Database,
+	changes []*ChangeEvent,
+	bulker *Uploader,
+	replicationID string,
+	errChan chan error,
+	sem chan struct{},
+	wg *sync.WaitGroup,
+) {
+	wg.Add(1)
+
+	defer func() { <-sem }()
+	defer wg.Done() // must be executed *before* the semaphore read, hence after on the defer stack
+
+	startTime := time.Now().UTC().Format(time.RFC1123)
+	sessionID, err := uuid()
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	// 1. RevsDiff the batch against the destination DB
+	rd := &RevsDiffRequestBody{}
+	recordedSeq := ""
+	for _, ch := range changes {
+		rd.Add(ch.Meta.ID, ch.Meta.Rev)
+		if ch.Seq != "" {
+			recordedSeq = ch.Seq
+		}
+	}
+
+	missing, err := destination.RevsDiff(rd)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	// 2. Fetch any missing revs
 	reqBody := &BulkGetRequest{}
 	for ID, revs := range *missing {
 		for _, rev := range revs.Missing {
@@ -358,15 +437,42 @@ func (d Database) handleChangesBatch(destination *Database, changes []*ChangeEve
 
 	resp, err := d.BulkGet(reqBody, true)
 	if err != nil {
-		return err
+		errChan <- err
+		return
 	}
 
-	// Bulk load in batches to destination
+	// 3. Bulk load to destination
+	docs := []interface{}{}
 	for _, item := range resp.Results {
 		for _, doc := range item.Docs {
-			bulker.Upload(doc.OK)
+			docs = append(docs, doc.OK)
 		}
 	}
 
-	return nil
+	response, err := bulker.BulkUploadSimple(docs)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	// 4. Update replication history
+	docWriteFailures := 0
+	docsWritten := 0
+	for _, item := range response {
+		if item.Error != "" {
+			docWriteFailures++
+		} else {
+			docsWritten++
+		}
+	}
+
+	logHistoryRow := LogHistoryRow{
+		StartTime:   startTime,
+		EndTime:     time.Now().UTC().Format(time.RFC1123),
+		RecordedSeq: recordedSeq,
+		SessionID:   sessionID,
+	}
+
+	d.WriteReplicationLog(replicationID, logHistoryRow)
+	destination.WriteReplicationLog(replicationID, logHistoryRow)
 }
