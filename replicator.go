@@ -455,17 +455,15 @@ func (d Database) handleChangesBatch(
 		return
 	}
 
-	// 4. Update replication history
-	docWriteFailures := 0
-	docsWritten := 0
+	// Check response for errors. Individual errors not considered fatal, but
+	// push onto the error channel for logging etc.
 	for _, item := range response {
 		if item.Error != "" {
-			docWriteFailures++
-		} else {
-			docsWritten++
+			errChan <- fmt.Errorf(item.Error)
 		}
 	}
 
+	// 4. Update replication history
 	logHistoryRow := LogHistoryRow{
 		StartTime:   startTime,
 		EndTime:     time.Now().UTC().Format(time.RFC1123),
@@ -473,6 +471,15 @@ func (d Database) handleChangesBatch(
 		SessionID:   sessionID,
 	}
 
-	d.WriteReplicationLog(replicationID, logHistoryRow)
-	destination.WriteReplicationLog(replicationID, logHistoryRow)
+	// If writing back the replication histories fail we limp on rather than
+	// bailing
+	err = d.WriteReplicationLog(replicationID, logHistoryRow)
+	if err != nil {
+		errChan <- err
+	}
+
+	err = destination.WriteReplicationLog(replicationID, logHistoryRow)
+	if err != nil {
+		errChan <- err
+	}
 }
