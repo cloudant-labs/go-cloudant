@@ -137,7 +137,15 @@ func TestBulkGet(t *testing.T) {
 	bg.Add("doc-new", rev1)
 	bg.Add("doc-new", rev2)
 
-	data, err := database.BulkGet(bg, true)
+	resp, err := database.BulkGet(bg)
 
-	fmt.Printf("%+v\n", data)
+	count := 0
+	for _, item := range resp.Results {
+		count += len(item.Docs)
+	}
+
+	if count != 2 {
+		t.Error("got unexpected number of revs back from BulkGet")
+		return
+	}
 }

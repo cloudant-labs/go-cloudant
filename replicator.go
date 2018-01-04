@@ -261,11 +261,9 @@ func (d *Database) GenerateReplicationID(destination *Database) string {
 //
 // https://github.com/apache/couchdb-chttpd/pull/33
 // https://pouchdb.com/api.html#bulk_get
-func (d Database) BulkGet(body *BulkGetRequest, revs bool) (*BulkGetResponse, error) {
+func (d Database) BulkGet(body *BulkGetRequest) (*BulkGetResponse, error) {
 	params := url.Values{}
-	if revs {
-		params.Add("revs", "true")
-	}
+	params.Add("revs", "true")
 
 	urlStr, err := Endpoint(*d.URL, "/_bulk_get", params)
 	if err != nil {
@@ -427,7 +425,11 @@ func (d Database) handleChangesBatch(
 		return
 	}
 
-	// 2. Fetch any missing revs
+	// 2. Fetch any missing revs. Note that CouchDB's _bulk_get isn't
+	// implemented as efficiently as it could be in the clustered
+	// scenario (Cloudant). We use it here to save on the HTTP overhead.
+	// If running over HTTP/2 individual GET requests is potentially more
+	// efficient.
 	reqBody := &BulkGetRequest{}
 	for ID, revs := range *missing {
 		for _, rev := range revs.Missing {
@@ -435,7 +437,7 @@ func (d Database) handleChangesBatch(
 		}
 	}
 
-	resp, err := d.BulkGet(reqBody, true)
+	resp, err := d.BulkGet(reqBody)
 	if err != nil {
 		errChan <- err
 		return
