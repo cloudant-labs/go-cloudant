@@ -1,10 +1,12 @@
 # go-cloudant
 
+
+
 A Cloudant library for Golang.
 
 [![Build Status](https://travis.ibm.com/cloudant/go-cloudant.svg?token=wExLyHssVGfwxehwRf9S&branch=master)](https://travis.ibm.com/cloudant/go-cloudant)
 
-_The API is not fully baked at this time and may change._
+_This library is not complete, may change in incompatible ways in future versions, and comes with no support whatsoever._
 
 ## Description
 
