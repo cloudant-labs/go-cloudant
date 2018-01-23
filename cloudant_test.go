@@ -13,12 +13,16 @@ import (
 func TestInvalidLogin(t *testing.T) {
 	username := os.Getenv("COUCH_USER")
 	password := "wR0ng_pa$$w0rd"
+	host := os.Getenv("COUCH_HOST_URL")
 
+	if host == "" {
+		host = "https://" + username + ".cloudant.com"
+	}
 	if username == "" {
 		t.Fatalf("expected env var COUCH_USER to be set")
 	}
 
-	_, err := CreateClient(username, password, "https://"+username+".cloudant.com", 5)
+	_, err := CreateClient(username, password, host, 5)
 
 	if err == nil {
 		t.Errorf("missing error from invalid login attempt")
@@ -729,12 +733,12 @@ func TestDatabase_GetWithRev(t *testing.T) {
 		57,
 	}
 
-	rev1, err1 := database.Set(doc)
+	meta1, err1 := database.Set(doc)
 	if err1 != nil {
 		t.Error("failed to create document")
 		return
 	}
-	if !strings.HasPrefix(rev1, "1-") {
+	if !strings.HasPrefix(meta1.Rev, "1-") {
 		t.Error("got unexpected revision on create")
 		return
 	}
@@ -749,12 +753,12 @@ func TestDatabase_GetWithRev(t *testing.T) {
 		Bar int    `json:"bar"`
 	}{
 		"doc-new",
-		rev1,
+		meta1.Rev,
 		"mydata",
 		57,
 	}
 
-	rev2, err2 := database.Set(doc2)
+	meta2, err2 := database.Set(doc2)
 	if err2 != nil {
 		t.Error("failed to update document")
 	}
@@ -763,7 +767,7 @@ func TestDatabase_GetWithRev(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	query := NewGetQuery().
-		Rev(rev1).
+		Rev(meta1.Rev).
 		Build()
 
 	err3 := database.Get("doc-new", query, doc2)
@@ -772,23 +776,23 @@ func TestDatabase_GetWithRev(t *testing.T) {
 		return
 	}
 
-	if doc2.Rev != rev1 {
+	if doc2.Rev != meta1.Rev {
 		t.Errorf("wrong revision %s", doc2.Rev)
 		return
 	}
 
 	// Use the latest revision
 	query = NewGetQuery().
-		Rev(rev2).
+		Rev(meta2.Rev).
 		Build()
 
 	err4 := database.Get("doc-new", query, doc2)
 	if err4 != nil {
-		t.Errorf("failed to fetch revision %s: %s", rev2, err4)
+		t.Errorf("failed to fetch revision %s: %s", meta2.Rev, err4)
 		return
 	}
 
-	if doc2.Rev != rev2 {
+	if doc2.Rev != meta2.Rev {
 		t.Errorf("wrong revision %s", doc2.Rev)
 		return
 	}
@@ -816,12 +820,12 @@ func TestDatabase_Set(t *testing.T) {
 		57,
 	}
 
-	rev, err := database.Set(doc)
+	meta, err := database.Set(doc)
 
 	if err != nil {
 		t.Error("failed to create document")
 	}
-	if !strings.HasPrefix(rev, "1-") {
+	if !strings.HasPrefix(meta.Rev, "1-") {
 		t.Error("got unexpected revision on create")
 	}
 
@@ -835,12 +839,12 @@ func TestDatabase_Set(t *testing.T) {
 		Bar int    `json:"bar"`
 	}{
 		"doc-new",
-		rev,
+		meta.Rev,
 		"mydata",
 		57,
 	}
 
-	rev, err = database.Set(doc2)
+	meta, err = database.Set(doc2)
 	if err != nil {
 		if dberr, ok := err.(*CouchError); ok {
 			t.Errorf("unexpected return code %d", dberr.StatusCode)
@@ -848,8 +852,38 @@ func TestDatabase_Set(t *testing.T) {
 		}
 	}
 
-	if !strings.HasPrefix(rev, "2-") {
+	if !strings.HasPrefix(meta.Rev, "2-") {
 		t.Error("got unexpected revision on update")
+	}
+}
+
+func TestDatabase_SetNoId(t *testing.T) {
+	// Note: this is generally a bad idea, as subject to eventual consistency
+	// constraints.
+	database, err := makeDatabase()
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+	defer func() {
+		fmt.Printf("Deleting database %s", database.Name)
+		database.client.Delete(database.Name)
+	}()
+
+	doc := &struct {
+		Foo string `json:"foo"`
+		Bar int    `json:"bar"`
+	}{
+		"mydata",
+		57,
+	}
+
+	meta, err := database.Set(doc)
+
+	if err != nil {
+		t.Error("failed to create document")
+	}
+	if !strings.HasPrefix(meta.Rev, "1-") {
+		t.Error("got unexpected revision on create")
 	}
 }
 
@@ -873,7 +907,7 @@ func TestDatabase_DeleteDoc(t *testing.T) {
 		57,
 	}
 
-	rev, err := database.Set(doc)
+	meta, err := database.Set(doc)
 	if err != nil {
 		t.Error("failed to create document")
 	}
@@ -881,7 +915,7 @@ func TestDatabase_DeleteDoc(t *testing.T) {
 	// Note: lame attempt to close inconsistency window
 	time.Sleep(500 * time.Millisecond)
 
-	err = database.Delete("doc-new", rev)
+	err = database.Delete("doc-new", meta.Rev)
 	if err != nil {
 		t.Error("failed to delete document")
 	}
@@ -889,7 +923,7 @@ func TestDatabase_DeleteDoc(t *testing.T) {
 	// Note: lame attempt to close inconsistency window
 	time.Sleep(500 * time.Millisecond)
 
-	err = database.Delete("doc-new", rev)
+	err = database.Delete("doc-new", meta.Rev)
 	if err == nil { // should fail
 		t.Error("unexpected return code from delete")
 	}

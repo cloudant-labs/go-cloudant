@@ -27,12 +27,17 @@ func dbName() (string, error) {
 func makeClient() (*CouchClient, error) {
 	username := os.Getenv("COUCH_USER")
 	password := os.Getenv("COUCH_PASS")
+	host := os.Getenv("COUCH_HOST_URL")
 
 	if username == "" || password == "" {
 		return nil, fmt.Errorf("Expected env vars COUCH_USER and COUCH_PASS to be set")
 	}
 
-	return CreateClient(username, password, "https://"+username+".cloudant.com", 5)
+	if host == "" {
+		host = "https://" + username + ".cloudant.com"
+	}
+
+	return CreateClient(username, password, host, 5)
 }
 
 func makeDatabase() (*Database, error) {

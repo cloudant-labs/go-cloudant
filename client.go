@@ -16,15 +16,16 @@ import (
 
 // LogFunc is a function that logs the provided message with optional fmt.Sprintf-style arguments.
 // By default, logs to the default log.Logger.
-var LogFunc func(string, ...interface{}) = log.Printf
+var LogFunc = log.Printf
 
 // HTTP client timeouts
-var TransportTimeout time.Duration = 30 * time.Second
-var TransportKeepAlive time.Duration = 30 * time.Second
-var TLSHandshakeTimeout time.Duration = 10 * time.Second
-var ResponseHeaderTimeout time.Duration = 10 * time.Second
-var ExpectContinueTimeout time.Duration = 1 * time.Second
+var transportTimeout = 30 * time.Second
+var transportKeepAlive = 30 * time.Second
+var handshakeTimeoutTLS = 10 * time.Second
+var responseHeaderTimeout = 10 * time.Second
+var expectContinueTimeout = 1 * time.Second
 
+// CouchClient is the representation of a client connection
 type CouchClient struct {
 	username      string
 	password      string
@@ -54,9 +55,13 @@ func Endpoint(base url.URL, pathStr string, params url.Values) (string, error) {
 
 // CreateClient returns a new client (with max. retry 3 using a random 5-30 secs delay).
 func CreateClient(username, password, rootStrURL string, concurrency int) (*CouchClient, error) {
+	if concurrency <= 0 {
+		return nil, fmt.Errorf("Concurrency must be >= 1")
+	}
 	return CreateClientWithRetry(username, password, rootStrURL, concurrency, 3, 5, 30)
 }
 
+// CreateClientWithRetry returns a new client with configurable retry parameters
 func CreateClientWithRetry(username, password, rootStrURL string, concurrency, retryCountMax,
 	retryDelayMin, retryDelayMax int) (*CouchClient, error) {
 
@@ -68,12 +73,12 @@ func CreateClientWithRetry(username, password, rootStrURL string, concurrency, r
 		Jar: cookieJar,
 		Transport: &http.Transport{
 			Dial: (&net.Dialer{
-				Timeout:   TransportTimeout,
-				KeepAlive: TransportKeepAlive,
+				Timeout:   transportTimeout,
+				KeepAlive: transportKeepAlive,
 			}).Dial,
-			TLSHandshakeTimeout:   TLSHandshakeTimeout,
-			ResponseHeaderTimeout: ResponseHeaderTimeout,
-			ExpectContinueTimeout: ExpectContinueTimeout,
+			TLSHandshakeTimeout:   handshakeTimeoutTLS,
+			ResponseHeaderTimeout: responseHeaderTimeout,
+			ExpectContinueTimeout: expectContinueTimeout,
 		},
 	}
 
