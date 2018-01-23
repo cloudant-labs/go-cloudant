@@ -149,3 +149,70 @@ func TestBulkGet(t *testing.T) {
 		return
 	}
 }
+
+func TestReplication(t *testing.T) {
+	database1, err := makeDatabase()
+	if err != nil {
+		t.Errorf("failed to create database 1")
+	}
+	defer func() {
+		fmt.Printf("Deleting database %s", database1.Name)
+		database1.client.Delete(database1.Name)
+	}()
+
+	database2, err := makeDatabase()
+	if err != nil {
+		t.Errorf("failed to create database 2")
+	}
+
+	defer func() {
+		fmt.Printf("Deleting database %s", database2.Name)
+		database2.client.Delete(database2.Name)
+	}()
+
+	doc := &struct {
+		ID  string `json:"_id"`
+		Foo string `json:"foo"`
+		Bar int    `json:"bar"`
+	}{
+		"doc-new",
+		"mydata",
+		57,
+	}
+
+	rev1, err1 := database1.Set(doc)
+	if err1 != nil {
+		t.Error("failed to create document")
+		return
+	}
+
+	// Note: lame attempt to close inconsistency window
+	time.Sleep(500 * time.Millisecond)
+
+	doc2 := &struct {
+		ID  string `json:"_id"`
+		Rev string `json:"_rev"`
+		Foo string `json:"foo"`
+		Bar int    `json:"bar"`
+	}{
+		"doc-new",
+		rev1,
+		"mydata",
+		57,
+	}
+
+	rev2, err2 := database.Set(doc2)
+	if err2 != nil {
+		t.Error("failed to update document")
+	}
+
+	// Note: lame attempt to close inconsistency window
+	time.Sleep(500 * time.Millisecond)
+
+	database1.ReplicateTo(database2, 10, 2)
+
+	if count != 2 {
+		t.Error("got unexpected number of revs back from BulkGet")
+		return
+	}
+}

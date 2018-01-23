@@ -17,6 +17,16 @@ import (
 	"time"
 )
 
+type Replicator struct {
+	Source      *Database
+	Sink        *Database
+	Concurrency int
+	BatchSize   int
+	Error       chan error
+	Event       chan string
+	Done        chan struct{}
+}
+
 // LogHistoryRow ...
 type LogHistoryRow struct {
 	DocWriteFailures int    `json:"doc_write_failures,omitempty"` // Number of failed writes
@@ -317,13 +327,13 @@ func uuid() (string, error) {
 // to the destination, and also determines the seq_interval for the source
 // changes feed. The `concurrency` parameter sets the max number of concurrent
 // batches to process.
-func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency int) error {
+func (r *Replicator) Replicate() error {
 
-	replicationID := d.GenerateReplicationID(destination)
-	sourceLog, err := d.GetReplicationLog(replicationID)
-	destLog, err := destination.GetReplicationLog(replicationID)
+	replicationID := r.GenerateReplicationID()
+	sourceLog, err := r.Source.GetReplicationLog(replicationID)
+	destLog, err := r.Sink.GetReplicationLog(replicationID)
 
-	follower := NewFollower(d, batchSize)
+	follower := NewFollower(r.Source, batchSize)
 	follower.heartbeat = 10000
 	if since, ok := sourceLog.FindCommonAncestry(destLog); ok {
 		follower.since = since
@@ -339,7 +349,6 @@ func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency
 
 	batch := []*ChangeEvent{}
 
-	errChan := make(chan error, 1)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrency)
 	defer func() {
@@ -350,31 +359,30 @@ func (d *Database) ReplicateTo(destination *Database, batchSize int, concurrency
 		// Trigger and wait for any upload workers that hold queued docs
 		wg.Wait()
 		uploader.Flush()
-		close(errChan)
 	}()
 
 CHANGES:
 	for {
 		select {
-		case err = <-errChan:
-			LogFunc(fmt.Sprintf("replicator error, %s", err))
+		case <-r.Done:
+			break CHANGES
 		case changeEvent := <-changes:
 			switch changeEvent.EventType {
 			case ChangesHeartbeat:
 			case ChangesError:
-				LogFunc(fmt.Sprintf("changes error, %s", changeEvent.Err))
+				r.Error <- changeEvent.Err
 			case ChangesTerminated:
 				break CHANGES
 			default:
 				batch = append(batch, changeEvent)
-				if len(batch) >= batchSize {
+				if len(batch) >= r.BatchSize {
 					sem <- struct{}{}
 					go d.handleChangesBatch(
 						destination,
 						batch,
 						uploader,
 						replicationID,
-						errChan,
+						r.Error,
 						sem,
 						&wg,
 					)
