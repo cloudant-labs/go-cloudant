@@ -27,6 +27,33 @@ go get github.ibm.com/cloudant/go-cloudant
 
 ## Getting Started
 
+### Running the Tests
+
+To run the tests, you need a Cloudant (or CouchDB) database to talk to. The tests
+expect the following environment variables to be available:
+
+```sh
+COUCH_USER
+COUCH_PASS
+COUCH_HOST_URL # optional
+```
+
+If the last one isn't set, the host url is assumed to be `https://$COUCH_USER.cloudant.com`.
+
+If you want to run against a local CouchDB in Docker, try:
+
+```sh
+docker run -d -p 5984:5984 --rm --name couchdb couchdb:1.6
+curl -XPUT 'http://127.0.0.1:5984/_config/admins/mrblobby' -d '"blobbypassword"'
+export COUCH_USER="mrblobby"
+export COUCH_PASS="blobbypassword"
+export COUCH_HOST_URL="http://127.0.0.1:5984"
+go test
+```
+
+Note -- this library does not allow for unauthenticated connections, so you can't
+run against a CouchDB node in `admin party` mode. This is a good thing.
+
 ### Creating a Cloudant client
 
 ```go

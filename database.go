@@ -308,28 +308,28 @@ func (d *Database) Delete(documentID, rev string) error {
 	return expectedReturnCodes(job, 200)
 }
 
-// Set a document. The specified type must have a json '_id' attribute.
-// Be sure to also include a json '_rev' attribute if you are updating an existing document.
-func (d *Database) Set(document interface{}) (string, error) {
+// Set a document. The specified type may have a json attributes '_id' and '_rev'.
+// If no '_id' is given the database will generate one for you.
+func (d *Database) Set(document interface{}) (*DocumentMeta, error) {
 	jsonDocument, err := json.Marshal(document)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	job, err := d.client.request("POST", d.URL.String(), bytes.NewReader(jsonDocument))
 	defer job.Close()
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	err = expectedReturnCodes(job, 201, 202)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	resp := new(DocumentMeta)
+	resp := &DocumentMeta{}
 	err = json.NewDecoder(job.response.Body).Decode(resp)
 
-	return resp.Rev, err
+	return resp, err
 }
