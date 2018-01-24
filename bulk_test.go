@@ -91,7 +91,7 @@ func TestBulk_NewEditsFalse(t *testing.T) {
 		// new_edits=false returns no data, so can't assert based on returns
 	}
 
-	time.Sleep(5 * time.Second) // allow primary index to update
+	time.Sleep(15 * time.Second) // allow primary index to update
 
 	rows, err := database.All(NewAllDocsQuery().Build())
 	foundRevs := map[string]string{}
