@@ -1,7 +1,5 @@
 # go-cloudant
 
-
-
 A Cloudant library for Golang.
 
 [![Build Status](https://travis.ibm.com/cloudant/go-cloudant.svg?token=wExLyHssVGfwxehwRf9S&branch=master)](https://travis.ibm.com/cloudant/go-cloudant)
@@ -15,7 +13,7 @@ A [Cloudant](https://cloudant.com/) library for Golang.
 ## Installation
 
 ```bash
-go get github.ibm.com/cloudant/go-cloudant
+go get github.com/cloudant-labs/go-cloudant
 ```
 
 ## Current Features
