@@ -2,7 +2,7 @@
 
 A Cloudant library for Golang.
 
-[![Build Status](https://travis.ibm.com/cloudant/go-cloudant.svg?token=wExLyHssVGfwxehwRf9S&branch=master)](https://travis.ibm.com/cloudant/go-cloudant)
+[![Build Status](https://travis-ci.org/cloudant-labs/go-cloudant.svg?branch=master)](https://travis-ci.org/cloudant-labs/go-cloudant)
 
 __This library is not complete, may change in incompatible ways in future versions, and comes with no support whatsoever.__
 
