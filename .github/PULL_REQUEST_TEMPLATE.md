@@ -1,10 +1,8 @@
 Thanks for your hard work, please ensure all items are complete before opening.
 
-- [ ] Tick to sign-off your agreement to the [Developer Certificate of Origin
-  (DCO)
-  1.1](https://github.com/cloudant-labs/go-cloudant/blob/master/DCO1.1.txt)
-- [ ] You have added tests for any code changes
-- [ ] You have completed the PR template below:
+- [ ] Tick to sign-off your agreement to the [Developer Certificate of Origin (DCO) 1.1](https://github.com/cloudant-labs/go-cloudant/blob/master/DCO1.1.txt).
+- [ ] You have added tests for any code changes.
+- [ ] You have completed the PR template below.
 
 ## What
 
