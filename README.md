@@ -117,7 +117,7 @@ db, err := client.GetOrCreate("my_database")
 err := db.Delete("my_doc_id", "2-xxxxxxx")
 ```
 
-### Using `_bulk_docs`
+### Using `/_bulk_docs`
 
 ```go
 // create a Cloudant client (max. request concurrency 5)
