@@ -72,6 +72,11 @@ func (j *Job) Close() {
 	}
 }
 
+// Response returns the http response
+func (j *Job) Response() *http.Response {
+	return j.response
+}
+
 // Mark job as done.
 func (j *Job) done() { j.isDone <- true }
 
