@@ -135,7 +135,7 @@ func newUploader(database *Database, batchSize, batchMaxBytes, buffer int, flush
 
 // BulkUploadSimple does a one-shot synchronous bulk upload
 func (u *Uploader) BulkUploadSimple(docs []interface{}) ([]BulkDocsResponse, error) {
-	result, err := uploadBulkDocs(&BulkDocsRequest{docs, u.NewEdits}, u.database)
+	result, err := UploadBulkDocs(&BulkDocsRequest{docs, u.NewEdits}, u.database)
 	defer result.Close()
 
 	if err != nil || result == nil {
@@ -429,7 +429,8 @@ func processResult(jobs *[]*BulkJob, result *Job, err error, isNewEdits bool) {
 	}
 }
 
-func uploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) (result *Job, err error) {
+// UploadBulkDocs performs a synchronous _bulk_docs POST
+func UploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) (result *Job, err error) {
 	jsonBulkDocs, err := json.Marshal(bulkDocs)
 	if err != nil {
 		return
