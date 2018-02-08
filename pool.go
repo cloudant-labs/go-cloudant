@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"runtime"
 	"time"
 )
 
@@ -127,6 +128,9 @@ func (w *worker) start() {
 			}
 
 			job.request.Body = ioutil.NopCloser(bytes.NewReader(job.bodyBytes))
+
+			// add go-cloudant UA
+			job.request.Header.Add("User-Agent", "go-cloudant/"+VERSION+"/"+runtime.Version())
 
 			resp, err := worker.client.httpClient.Do(job.request)
 
