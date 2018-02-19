@@ -67,5 +67,5 @@ func makeDocuments(database *Database, docCount int) {
 }
 
 func travis() bool {
-	return os.Getenv("TRAVIS") == "travis"
+	return os.Getenv("TRAVIS") == "true"
 }

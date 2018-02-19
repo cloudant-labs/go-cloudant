@@ -114,14 +114,15 @@ func TestAllDBs_StartKeyEndKey(t *testing.T) {
 func TestAllDBs_Limit(t *testing.T) {
 	if travis() {
 		fmt.Printf("[SKIP] TestAllDBs_Limit requires CouchDB 2.X")
+		return
 	}
+	limit := 20
 	dbNames := map[string]bool{}
 	client, err := makeClient()
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 
-	dbCount := 0
 	for i := 0; i < 20; i++ {
 		dbname := fmt.Sprintf("aaaa%d", i)
 		_, err = client.GetOrCreate(dbname)
@@ -136,13 +137,13 @@ func TestAllDBs_Limit(t *testing.T) {
 		}
 	}()
 
-	query := NewAllDBsQuery().Limit(10).Build()
+	query := NewAllDBsQuery().Limit(limit).Build()
 	values, _ := query.GetQuery()
 	queryString := values.Encode()
 	fmt.Print(queryString)
 
 	dbList, err := client.AllDBs(query)
-	if len(*dbList) != 10 {
-		t.Errorf("expected %d databases, found %d", dbCount, len(*dbList))
+	if len(*dbList) != limit {
+		t.Errorf("expected %d databases, found %d", limit, len(*dbList))
 	}
 }
