@@ -91,7 +91,9 @@ func TestBulk_NewEditsFalse(t *testing.T) {
 		// new_edits=false returns no data, so can't assert based on returns
 	}
 
-	time.Sleep(15 * time.Second) // allow primary index to update
+	// allow primary index to update -- seems to be a particular
+	// problem on travis/docker...
+	time.Sleep(25 * time.Second)
 
 	rows, err := database.All(NewAllDocsQuery().Build())
 	foundRevs := map[string]string{}

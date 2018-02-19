@@ -65,3 +65,7 @@ func makeDocuments(database *Database, docCount int) {
 	}
 	uploader.Flush()
 }
+
+func travis() bool {
+	return os.Getenv("TRAVIS") == "travis"
+}

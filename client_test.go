@@ -68,6 +68,10 @@ func TestAllDBs(t *testing.T) {
 }
 
 func TestAllDBs_StartKeyEndKey(t *testing.T) {
+	if travis() {
+		fmt.Printf("[SKIP] TestAllDBs_StartKeyEndKey requires CouchDB 2.X")
+		return
+	}
 	dbNames := map[string]bool{}
 	client, err := makeClient()
 	if err != nil {
@@ -108,6 +112,9 @@ func TestAllDBs_StartKeyEndKey(t *testing.T) {
 }
 
 func TestAllDBs_Limit(t *testing.T) {
+	if travis() {
+		fmt.Printf("[SKIP] TestAllDBs_Limit requires CouchDB 2.X")
+	}
 	dbNames := map[string]bool{}
 	client, err := makeClient()
 	if err != nil {

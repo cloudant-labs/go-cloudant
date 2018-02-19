@@ -1,5 +1,7 @@
 package cloudant
 
+// NOTE: These parameters are ignored on CouchDB 1.6.X!
+//
 // QueryBuilder implementation for the AllDBs() API call.
 //
 // Example:
