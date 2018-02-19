@@ -2,6 +2,7 @@ package cloudant
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -149,6 +150,34 @@ func (c *CouchClient) Exists(databaseName string) (bool, error) {
 	}
 
 	return job.response.StatusCode == 200, nil
+}
+
+// AllDBs returns a list of all DBs
+func (c *CouchClient) AllDBs(args *allDBsQuery) (*[]string, error) {
+	params, err := args.GetQuery()
+	if err != nil {
+		return nil, err
+	}
+
+	urlStr, err := Endpoint(*c.rootURL, "/_all_dbs", params)
+	if err != nil {
+		return nil, err
+	}
+
+	job, err := c.request("GET", urlStr, nil)
+	defer job.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	err = expectedReturnCodes(job, 200)
+	if err != nil {
+		return nil, err
+	}
+
+	vals := &[]string{}
+	err = json.NewDecoder(job.response.Body).Decode(vals)
+	return vals, err
 }
 
 // Get returns a database. It is assumed to exist.
