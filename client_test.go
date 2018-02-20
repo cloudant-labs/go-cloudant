@@ -138,10 +138,6 @@ func TestAllDBs_Limit(t *testing.T) {
 	}()
 
 	query := NewAllDBsQuery().Limit(limit).Build()
-	values, _ := query.GetQuery()
-	queryString := values.Encode()
-	fmt.Print(queryString)
-
 	dbList, err := client.AllDBs(query)
 	if len(*dbList) != limit {
 		t.Errorf("expected %d databases, found %d", limit, len(*dbList))
