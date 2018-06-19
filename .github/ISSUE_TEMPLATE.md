@@ -29,5 +29,5 @@ Got a 400 bad request
 - Version(s) that are affected by this issue.
     > 2.0.2
 - Golang version
-    >1.10.2
+    > 1.10.2
 -->
