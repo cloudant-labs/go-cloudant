@@ -10,11 +10,7 @@ before_script:
   - curl -X PUT $COUCH_HOST_URL/_config/admins/$COUCH_USER -d '"'$COUCH_PASS'"'
 
 go:
- - 1.6
- - 1.7.x
- - 1.8.x
- - 1.9.x
- - 1.10.x
+ - 1.13.x
 
 script:
  - go test -v ./...

@@ -50,7 +50,7 @@ func makeDatabase() (*Database, error) {
 		return nil, err
 	}
 
-	return client.GetOrCreate(testdbname)
+	return client.UseOrCreate(testdbname)
 }
 
 func makeDocuments(database *Database, docCount int) {

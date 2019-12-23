@@ -15,7 +15,7 @@ func TestBulk_AsyncFlush(t *testing.T) {
 
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
-		database.client.Delete(database.Name)
+		database.client.Destroy(database.Name)
 	}()
 
 	uploader := database.Bulk(5, -1, 0)
@@ -56,7 +56,7 @@ func TestBulk_NewEditsFalse(t *testing.T) {
 
 	defer func() {
 		fmt.Printf("Deleting database %s\n", database.Name)
-		database.client.Delete(database.Name)
+		database.client.Destroy(database.Name)
 	}()
 
 	uploader := database.Bulk(5, -1, 0)
@@ -99,7 +99,7 @@ func TestBulk_NewEditsFalse(t *testing.T) {
 	// problem on travis/docker...
 	time.Sleep(10 * time.Second)
 
-	rows, err := database.All(NewAllDocsQuery().Build())
+	rows, err := database.List(NoParams())
 	foundRevs := map[string]string{}
 	for {
 		row, more := <-rows
@@ -125,7 +125,7 @@ func TestBulk_AsyncFlushTwoBatches(t *testing.T) {
 
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
-		database.client.Delete(database.Name)
+		database.client.Destroy(database.Name)
 	}()
 
 	uploader := database.Bulk(5, -1, 0)
@@ -198,7 +198,7 @@ func TestBulk_PeriodicFlush(t *testing.T) {
 	}
 	defer func() {
 		fmt.Printf("Deleting database %s", database.Name)
-		database.client.Delete(database.Name)
+		database.client.Destroy(database.Name)
 	}()
 
 	uploader := database.Bulk(10, -1, 10)

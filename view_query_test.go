@@ -5,21 +5,7 @@ import (
 	"testing"
 )
 
-func TestAllDocsQuery_Args(t *testing.T) {
-	// Conflicts        bool
-	// DeletedConflicts bool
-	// Descending       bool
-	// EndKey           string
-	// IncludeDocs      bool
-	// InclusiveEnd     bool
-	// Key              string
-	// Keys             []string
-	// Limit            int
-	// Meta             bool
-	// R                int
-	// RevsInfo         bool
-	// Skip             int
-	// StartKey         string
+func TestViewQuery(t *testing.T) {
 
 	expectedQueryStrings := []string{
 		"conflicts=true",
@@ -34,7 +20,7 @@ func TestAllDocsQuery_Args(t *testing.T) {
 		"skip=32",
 	}
 
-	query := NewAllDocsQuery().
+	viewQuery := NewViewQuery().
 		Conflicts().
 		DeletedConflicts().
 		Descending().
@@ -44,11 +30,9 @@ func TestAllDocsQuery_Args(t *testing.T) {
 		Meta().
 		R(2).
 		RevsInfo().
-		Skip(32).
-		Build()
+		Skip(32)
 
-	values, _ := query.GetQuery()
-	queryString := values.Encode()
+	queryString := viewQuery.Values.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

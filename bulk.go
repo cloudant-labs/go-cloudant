@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var bulkUploadBuffer = 1000 // buffer for bulk upload channel
+
 // BulkDocsRequest is the JSON body of a request to the _bulk_docs endpoint
 type BulkDocsRequest struct {
 	Docs     []interface{} `json:"docs"`
@@ -38,6 +40,11 @@ type BulkJob struct {
 	isDone   chan bool
 	priority bool
 	Response *BulkDocsResponse
+}
+
+// Bulk returns a new bulk document uploader.
+func (d *Database) Bulk(batchSize int, batchMaxBytes int, flushSecs int) *Uploader {
+	return newUploader(d, batchSize, batchMaxBytes, bulkUploadBuffer, flushSecs)
 }
 
 func newBulkJob(doc interface{}, priority bool) *BulkJob {

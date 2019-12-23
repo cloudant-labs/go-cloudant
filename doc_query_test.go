@@ -32,7 +32,7 @@ func TestGetQuery_GetArgs(t *testing.T) {
 		"revs_info=true",
 	}
 
-	query := NewGetQuery().
+	query := NewDocQuery().
 		Attachments().
 		AttEncodingInfo().
 		Conflicts().
@@ -42,11 +42,9 @@ func TestGetQuery_GetArgs(t *testing.T) {
 		Meta().
 		Rev("1-bf1b7e045f2843995184f78022b3d0f5").
 		Revs().
-		RevsInfo().
-		Build()
+		RevsInfo()
 
-	values, _ := query.GetQuery()
-	queryString := values.Encode()
+	queryString := query.Values.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

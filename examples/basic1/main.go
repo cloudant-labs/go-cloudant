@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	cldt "github.com/cloudant-labs/go-cloudant"
+	cldt "github.com/barshociaj/go-cloudant"
 	"github.com/joho/godotenv"
 )
 
@@ -53,7 +53,7 @@ func main() {
 	}
 
 	// Try to get the database specified in the .env file, if it does not exist it, create it
-	db, err4 := cloudant.GetOrCreate(cloudantDB)
+	db, err4 := cloudant.UseOrCreate(cloudantDB)
 	if err4 != nil {
 		log.Println("Error getting or creating Cloudant DB")
 		log.Fatal(err4)
@@ -64,7 +64,7 @@ func main() {
 	item.Score = 1
 	item.Comment = "Number 1"
 
-	result, err5 := db.Set(item)
+	result, err5 := db.Insert(item)
 	if err5 != nil {
 		log.Println("Error creating a document")
 		log.Fatal(err5)

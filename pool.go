@@ -108,6 +108,7 @@ var workerFunc func(worker *worker, job *Job) // func executed by workers
 // Generates a random int within the range [min, max]
 func random(min, max int) int { return rand.Intn(max-min) + min }
 
+// CredentialsExpiredResponse holds credentials error message
 type CredentialsExpiredResponse struct {
 	Error string `json:"error"`
 }
@@ -167,7 +168,7 @@ func (w *worker) start() {
 
 			if retry {
 				if job.retryCount < w.client.retryCountMax {
-					job.retryCount += 1
+					job.retryCount++
 
 					go func(startDelay int) {
 						time.Sleep(time.Duration(startDelay) * time.Second)
@@ -175,10 +176,10 @@ func (w *worker) start() {
 					}(random(w.client.retryDelayMin, w.client.retryDelayMax))
 
 					return
-				} else {
-					LogFunc("%s %s failed, too many retries",
-						job.request.Method, job.request.URL.String())
 				}
+				LogFunc("%s %s failed, too many retries",
+					job.request.Method, job.request.URL.String())
+
 			}
 			job.response = resp
 			job.error = err

@@ -1,23 +1,12 @@
 # go-cloudant
 
-A Cloudant library for Golang.
+A [Cloudant](https://cloudant.com/) library for Golang. 
+
+Forked from cloudant-labs and modified to align closer to NodeJS `nano` library. __This library is not complete, may change in incompatible ways in future versions, and comes with no support.__
 
 [![Build Status](https://travis-ci.org/cloudant-labs/go-cloudant.svg?branch=master)](https://travis-ci.org/cloudant-labs/go-cloudant)
 
-__This library is not complete, may change in incompatible ways in future versions, and comes with no support whatsoever.__
-
-## Description
-
-A [Cloudant](https://cloudant.com/) library for Golang.
-
-## Installation
-
-```bash
-go get github.com/cloudant-labs/go-cloudant
-```
-
-## Current Features
-
+Features:
 - Session authentication
 - Keep-Alive & Connection Pooling
 - Configurable request retrying
@@ -25,58 +14,155 @@ go get github.com/cloudant-labs/go-cloudant
 - Stream `/_all_docs` & `/_changes`
 - Manage `/_bulk_docs` uploads
 
+## Installation
+
+```bash
+go get github.com/barshociaj/go-cloudant
+```
+
 ## Getting Started
-
-### Running the Tests
-
-To run the tests, you need a Cloudant (or CouchDB) database to talk to. The tests
-expect the following environment variables to be available:
-
-```sh
-COUCH_USER
-COUCH_PASS
-COUCH_HOST_URL # optional
-```
-
-If the last one isn't set, the host url is assumed to be `https://$COUCH_USER.cloudant.com`.
-
-If you want to run against a local CouchDB in Docker, try:
-
-```sh
-docker run -d -p 5984:5984 --rm --name couchdb couchdb:1.6
-curl -XPUT 'http://127.0.0.1:5984/_config/admins/mrblobby' -d '"blobbypassword"'
-export COUCH_USER="mrblobby"
-export COUCH_PASS="blobbypassword"
-export COUCH_HOST_URL="http://127.0.0.1:5984"
-go test
-```
-
-Note -- this library does not allow for unauthenticated connections, so you can't
-run against a CouchDB node in `admin party` mode. This is a good thing.
-
-### Creating a Cloudant client
 
 ```go
 // create a Cloudant client (max. request concurrency 5) with default retry configuration:
 //   - maximum retries per request:     3
 //   - random retry delay minimum:      5  seconds
 //   - random retry delay maximum:      30 seconds
-client1, err1 := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
+client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
 
 // create a Cloudant client (max. request concurrency 20) with _custom_ retry configuration:
 //   - maximum retries per request:     5
 //   - random retry delay minimum:      10  seconds
 //   - random retry delay maximum:      60 seconds
-client2, err2 := cloudant.CreateClientWithRetry("user123", "pa55w0rd01", "https://user123.cloudant.com", 20, 5, 10, 60)
+client1, err1 := cloudant.CreateClientWithRetry("user123", "pa55w0rd01", "https://user123.cloudant.com", 20, 5, 10, 60)
 ```
 
-### `Get` a document
+## Database functions
+
+### `client.Destroy(dbName)`
+
+Delete existing database
+```go
+err := client.Destroy("my_db")
+```
+
+### `client.Exists(dbName)`
+
+Checks if database exists
+```go
+exists, err := client.Exists("my_db")
+```
+
+### `client.Info(dbName)`
+
+Retrieve database info
+```go
+info, err := client.Info("my_db")
+fmt.Println(info.DocCount) // prints the number of documents in the database
+
+```
+
+### `client.List(params)`
+
+List existing databases
+```go
+dbList, err := client.List(NoParams())
+for _, name := range *dbList {
+    fmt.Println(name) // prints database names
+}
+```
+
+### `client.Use(dbName)`
+
+Use existing database:
+```go
+db, err := client.Use("my_database")
+```
+
+### `client.UseOrCreate(dbName)`
+
+Create (if does not exist) and use a database:
+```go
+db, err := client.UseOrCreate("my_database")
+```
+
+### `db.Changes(params)`
+
+Get changes feed from the database
 
 ```go
-// create a Cloudant client (max. request concurrency 5)
-client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
-db, err := client.GetOrCreate("my_database")
+params := cloudant.NewChangesQuery().IncludeDocs().Values
 
+changes, err := db.Changes(params)
+
+for {
+    change, more := <-changes
+    if more {
+        fmt.Println(change.Seq, change.Id, change.Rev)  // prints change 'seq', 'id' and 'rev'
+
+        // Doc body
+        str, _ := json.MarshalIndent(change.Doc, "", "  ")
+        fmt.Printf("%s\n", str)
+    } else {
+        break
+    }
+}
+```
+
+### `db.NewFollower(seq)`
+
+Creates a new changes feed follower that runs in continuous mode, emitting
+events from the changes feed on a channel. Its aims is to stay running until told to
+terminate with `changes.Close()`
+
+```go
+// Only generate a Seq ID every 100 changes
+follower := db.NewFollower(100)
+changes, err := follower.Follow()
+if err != nil {
+    fmt.Println(err)
+    return
+}
+
+for {
+    changeEvent := <-changes
+
+    switch changeEvent.EventType {
+    case cloudant.ChangesHeartbeat:
+        fmt.Println("tick")
+    case cloudant.ChangesError:
+        fmt.Println(changeEvent.Err)
+    case cloudant.ChangesTerminated:
+        fmt.Println("terminated; resuming from last known sequence id")
+        changes, err = follower.Follow()
+        if err != nil {
+            fmt.Println("resumption error ", err)
+            return
+        }
+    case cloudant.ChangesInsert:
+        fmt.Printf("INSERT %s\n", changeEvent.Meta.ID)
+    case cloudant.ChangesDelete:
+        fmt.Printf("DELETE %s\n", changeEvent.Meta.ID)
+    default:
+        fmt.Printf("UPDATE %s\n", changeEvent.Meta.ID)
+    }
+}
+```
+
+
+## Document functions
+
+### `db.Destroy(docID, rev)`
+
+Removes a document from database
+
+```go
+err := db.Destroy("my_doc_id", "2-xxxxxxx")
+```
+
+### `db.Get(docID, params, doc)`
+
+Gets a document from Cloudant whose _id is docID and unmarshals it into doc struct
+```go
 type Doc struct {
     Id     string    `json:"_id"`
     Rev    string    `json:"_rev"`
@@ -84,62 +170,69 @@ type Doc struct {
 }
 
 doc = new(Doc)
-err = db.Get("my_doc", doc)
+err = db.Get("my_doc_id", cloudant.NoParams(), doc)
 
 fmt.Println(doc.Foo)  // prints 'foo' key
 ```
 
-### `Set` a document
+### `db.Insert(doc)`
+
+Inserts `myDoc` in the database
 
 ```go
-// create a Cloudant client (max. request concurrency 5)
-client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
-db, err := client.GetOrCreate("my_database")
-
 myDoc := &Doc{
-        Id:     "my_doc_id",
-        Rev:    "2-xxxxxxx",
-        Foo:    "bar",
+    ID:     "my_doc_id",
+    Foo:    "bar",
 }
 
-newRev, err := db.Set(myDoc)
+newRev, err := db.Insert(myDoc)
 
 fmt.Println(newRev)  // prints '_rev' of new document revision
 ```
 
-### `Delete` a document
+### `db.InsertEscaped(doc)`
+
+Inserts `myDoc` in the database and escapes HTML in strings
 
 ```go
-// create a Cloudant client (max. request concurrency 5)
-client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
-db, err := client.GetOrCreate("my_database")
-
-err := db.Delete("my_doc_id", "2-xxxxxxx")
+newRev, err := db.InsertEscaped(myDoc)
 ```
 
-### Using `/_bulk_docs`
+### `db.InsertRaw(json)`
+
+Inserts raw JSON ([]byte) in the database
 
 ```go
-// create a Cloudant client (max. request concurrency 5)
-client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
-db, err := client.GetOrCreate("my_database")
+json := []byte(`{
+		"_id": "_design/test_design_doc",
+		"language": "javascript",
+		"views": {
+			"start_with_one": {
+				"map": "function (doc) { if (doc._id.indexOf('-01') > 0) emit(doc._id, doc.foo) }"
+			}
+		}
+	  }`)
 
+newRev, err := db.InsertRaw(json)
+```
+
+### `db.Bulk(batchSize, batchMaxBytes, flushSecs)`
+Bulk operations(update/delete/insert) on the database's `/_bulk_docs` endpoint
+
+```go
 myDoc1 := Doc{
-        Id:     "doc1",
-        Rev:    "1-xxxxxxx",
-        Foo:    "bar",
+    ID:     "doc1",
+    Foo:    "bar",
 }
 
 myDoc2 := Doc{
-        Id:     "doc2",
-        Rev:    "2-xxxxxxx",
-        Foo:    "bar",
+    ID:     "doc2",
+    Foo:    "bar",
 }
 
 myDoc3 := Doc{
-        Id:     "doc3",
-        Rev:    "3-xxxxxxx",
-        Foo:    "bar",
+    ID:     "doc3",
+    Foo:    "bar",
 }
 
 uploader := db.Bulk(50, 1048576, 60) // new uploader using batch size 50, max batch size 1MB, flushing documents to server every 60 seconds
@@ -174,24 +267,24 @@ if r3.Error != nil {
 }
 ```
 
-### Using `/_all_docs`
+## Views functions 
+
+### `db.List(params)`
+
+List all the docs in the database (`_all_docs` view)
 
 ```go
-// create a Cloudant client (max. request concurrency 5)
-client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
-db, err := client.GetOrCreate("my_database")
-
-rows, err := db.All(&allDocsQuery{})
+rows, err := db.List(cloudant.NoParams())
 
 // OR include some query options...
 //
-// q := cloudant.NewAllDocsQuery().
+// p := cloudant.NewViewQuery().
 //        Limit(123).
 //        StartKey("foo1").
 //        EndKey("foo2").
-//        Build()
+//        Values
 //
-//    rows, err := db.All(q)
+// rows, err := db.List(p)
 
 for{
     row, more := <-rows
@@ -203,75 +296,50 @@ for{
 }
 ```
 
-### Using `/_changes`
+### `db.View(designName, viewName, params, view)`
+
+Calls a view of the specified designName and decodes the result using provided interface
 
 ```go
-// create a Cloudant client (max. request concurrency 5)
-client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
-db, err := client.GetOrCreate("my_database")
-
-query := cloudant.NewChangesQuery().IncludeDocs().Build()
-
-changes, err := db.Changes(query)
-
-for {
-    change, more := <-changes
-    if more {
-        fmt.Println(change.Seq, change.Id, change.Rev)  // prints change 'seq', 'id' and 'rev'
-
-        // Doc body
-        str, _ := json.MarshalIndent(change.Doc, "", "  ")
-        fmt.Printf("%s\n", str)
-    } else {
-        break
-    }
+type Doc struct {
+	ID  string `json:"_id,omitempty"`
+	Rev string `json:"_rev,omitempty"`
+	Foo string `json:"foo" binding:"required"`
 }
+
+type DocsView struct {
+	Rows  []DocsViewRow `json:"rows"`
+	Error string        `json:"error"`
+}
+
+type DocsViewRow struct {
+	ID    string `json:"id"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	Doc   Doc    `json:"doc"`
+}
+
+myView := new(DocsView)
+params := cloudant.NewViewQuery().
+    Descending().
+    Key("foo1").
+    Limit(1).
+    IncludeDocs().
+    Values
+
+err := db.View("my_design_name", "my_view_name", params, myView)
 ```
 
-### Using `Follower`
+### `db.ViewRaw(designName, viewName, params)`
 
-`Follower` is a robust changes feed follower that runs in continuous mode, emitting
-events from the changes feed on a channel. Its aims is to stay running until told to
-terminate.
+Calls a view of the specified designName and returns raw []byte response. This allows querying views with arbitrary output such as when using reduce.
 
 ```go
-client, err := cloudant.CreateClient(...)
+import "github.com/buger/jsonparser"
 
-db, err := client.Get(DATABASE)
+response, err := db.ViewRaw("my_design_name", "my_view_name", cloudant.NoParams())
+
 if err != nil {
-    fmt.Printf("error\n")
-    return
-}
-
-// Only generate a Seq ID every 100 changes
-follower := cloudant.NewFollower(db, 100)
-changes, err := follower.Follow()
-if err != nil {
-    fmt.Println(err)
-    return
-}
-
-for {
-    changeEvent := <-changes
-
-    switch changeEvent.EventType {
-    case cloudant.ChangesHeartbeat:
-        fmt.Println("tick")
-    case cloudant.ChangesError:
-        fmt.Println(changeEvent.Err)
-    case cloudant.ChangesTerminated:
-        fmt.Println("terminated; resuming from last known sequence id")
-        changes, err = follower.Follow()
-        if err != nil {
-            fmt.Println("resumption error ", err)
-            return
-        }
-    case cloudant.ChangesInsert:
-        fmt.Printf("INSERT %s\n", changeEvent.Meta.ID)
-    case cloudant.ChangesDelete:
-        fmt.Printf("DELETE %s\n", changeEvent.Meta.ID)
-    default:
-        fmt.Printf("UPDATE %s\n", changeEvent.Meta.ID)
-    }
+    value, decodeErr := jsonparser.Get(response, "total_rows")
 }
 ```

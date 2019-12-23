@@ -1,5 +1,6 @@
 package cloudant
 
 const (
-	VERSION = "0.1.0"
+	// VERSION provides library version
+	VERSION = "0.2.0"
 )

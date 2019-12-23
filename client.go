@@ -2,7 +2,6 @@ package cloudant
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -45,6 +44,11 @@ type CouchClient struct {
 // that have many optional parameters
 type QueryBuilder interface {
 	GetQuery() (url.Values, error)
+}
+
+// NoParams returns empty query parameter values as a shortcut for default queries
+func NoParams() url.Values {
+	return url.Values{}
 }
 
 // Endpoint is a convenience function to build url-strings
@@ -108,121 +112,6 @@ func CreateClientWithRetry(username, password, rootStrURL string, concurrency, r
 	}
 
 	return &couchClient, nil
-}
-
-// Delete deletes a specified database.
-func (c *CouchClient) Delete(databaseName string) error {
-	databaseURL, err := url.Parse(c.rootURL.String())
-	if err != nil {
-		return err
-	}
-
-	databaseURL.Path = path.Join(databaseURL.Path, databaseName)
-
-	job, err := c.request("DELETE", databaseURL.String(), nil)
-	defer job.Close()
-
-	if err != nil {
-		return fmt.Errorf("failed to delete database %s, %s", databaseName, err)
-	}
-
-	if job.response.StatusCode != 200 {
-		return fmt.Errorf(
-			"failed to delete database %s, status %d", databaseName, job.response.StatusCode)
-	}
-
-	return nil
-}
-
-// Exists checks the existence of a specified database.
-// Returns true if the database exists, else false.
-func (c *CouchClient) Exists(databaseName string) (bool, error) {
-	databaseURL, err := url.Parse(c.rootURL.String())
-	if err != nil {
-		return false, err
-	}
-
-	job, err := c.request("HEAD", databaseURL.String(), nil)
-	defer job.Close()
-
-	if err != nil {
-		return false, fmt.Errorf("failed to query server: %s", err)
-	}
-
-	return job.response.StatusCode == 200, nil
-}
-
-// AllDBs returns a list of all DBs
-func (c *CouchClient) AllDBs(args *allDBsQuery) (*[]string, error) {
-	params, err := args.GetQuery()
-	if err != nil {
-		return nil, err
-	}
-
-	urlStr, err := Endpoint(*c.rootURL, "/_all_dbs", params)
-	if err != nil {
-		return nil, err
-	}
-
-	job, err := c.request("GET", urlStr, nil)
-	defer job.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	err = expectedReturnCodes(job, 200)
-	if err != nil {
-		return nil, err
-	}
-
-	vals := &[]string{}
-	err = json.NewDecoder(job.response.Body).Decode(vals)
-	return vals, err
-}
-
-// Get returns a database. It is assumed to exist.
-func (c *CouchClient) Get(databaseName string) (*Database, error) {
-	databaseURL, err := url.Parse(c.rootURL.String())
-	if err != nil {
-		return nil, err
-	}
-
-	databaseURL.Path += "/" + databaseName
-
-	database := &Database{
-		client: c,
-		Name:   databaseName,
-		URL:    databaseURL,
-	}
-
-	return database, nil
-}
-
-// GetOrCreate returns a database.
-// If the database doesn't exist on the server then it will be created.
-func (c *CouchClient) GetOrCreate(databaseName string) (*Database, error) {
-	database, err := c.Get(databaseName)
-	if err != nil {
-		return nil, err
-	}
-
-	job, err := c.request("PUT", database.URL.String(), nil)
-	defer job.Close()
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create database: %s", err)
-	}
-
-	if job.error != nil {
-		return nil, fmt.Errorf("failed to create database: %s", job.error)
-	}
-
-	if job.response.StatusCode != 201 && job.response.StatusCode != 412 {
-		return nil, fmt.Errorf(
-			"failed to create database, status %d", job.response.StatusCode)
-	}
-
-	return database, nil
 }
 
 // LogIn creates a session.

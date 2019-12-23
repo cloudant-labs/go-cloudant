@@ -31,7 +31,7 @@ func TestChangesQuery_Args(t *testing.T) {
 		"timeout=10",
 	}
 
-	query := NewChangesQuery().
+	params := NewChangesQuery().
 		Conflicts().
 		Descending().
 		Feed("continuous").
@@ -41,11 +41,9 @@ func TestChangesQuery_Args(t *testing.T) {
 		Limit(2).
 		Since("somerandomdatashouldbeSEQ").
 		Style("alldocs").
-		Timeout(10).
-		Build()
+		Timeout(10)
 
-	values, _ := query.GetQuery()
-	queryString := values.Encode()
+	queryString := params.Values.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

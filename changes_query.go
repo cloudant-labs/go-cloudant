@@ -1,11 +1,12 @@
 package cloudant
 
-// QueryBuilder implementation for the Changes() API call.
+// ChangesQuery is a helper utility to build Cloudant request parameters for changes feeds
+// Use .Values property (url.Values map) as params input to changes functions
 //
 // Example:
-// 	query := cloudant.NewChangesQuery().IncludeDocs().Build()
+// 	params := cloudant.NewChangesQuery().IncludeDocs().Values
 //
-//	changes, err := db.Changes(query)
+//	changes, err := db.Changes(params)
 
 import (
 	"encoding/json"
@@ -13,181 +14,105 @@ import (
 	"strconv"
 )
 
-// ChangesQueryBuilder defines the available parameter-setting functions.
-type ChangesQueryBuilder interface {
-	Conflicts() ChangesQueryBuilder
-	Descending() ChangesQueryBuilder
-	DocIDs([]string) ChangesQueryBuilder
-	Feed(string) ChangesQueryBuilder
-	Filter(string) ChangesQueryBuilder
-	Heartbeat(int) ChangesQueryBuilder
-	IncludeDocs() ChangesQueryBuilder
-	Limit(int) ChangesQueryBuilder
-	SeqInterval(int) ChangesQueryBuilder
-	Since(string) ChangesQueryBuilder
-	Style(string) ChangesQueryBuilder
-	Timeout(int) ChangesQueryBuilder
-	Build() *changesQuery
+// ChangesQuery object helps build Cloudant ChangesQuery parameters
+type ChangesQuery struct {
+	Values url.Values
 }
 
-type changesQueryBuilder struct {
-	conflicts   bool
-	descending  bool
-	docIDs      []string
-	feed        string
-	filter      string
-	heartbeat   int
-	includeDocs bool
-	limit       int
-	seqInterval int
-	since       string
-	style       string
-	timeout     int
+// NewChangesQuery is a shortcut to create new Cloudant ChangesQuery object with no parameters
+func NewChangesQuery() *ChangesQuery {
+	return &ChangesQuery{Values: url.Values{}}
 }
 
-// changesQuery holds the implemented API call parameters. The doc_ids parameter
-// is not yet implemented.
-type changesQuery struct {
-	Conflicts   bool
-	Descending  bool
-	DocIDs      []string
-	Feed        string
-	Filter      string
-	Heartbeat   int
-	IncludeDocs bool
-	Limit       int
-	SeqInterval int
-	Since       string
-	Style       string
-	Timeout     int
+// Conflicts applies conflicts=true parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Conflicts() *ChangesQuery {
+	q.Values.Set("conflicts", "true")
+	return q
 }
 
-// NewChangesQuery is the entry point.
-func NewChangesQuery() ChangesQueryBuilder {
-	return &changesQueryBuilder{}
+// Descending applies descending=true parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Descending() *ChangesQuery {
+	q.Values.Set("descending", "true")
+	return q
 }
 
-func (c *changesQueryBuilder) Conflicts() ChangesQueryBuilder {
-	c.conflicts = true
-	return c
-}
-
-func (c *changesQueryBuilder) Descending() ChangesQueryBuilder {
-	c.descending = true
-	return c
-}
-
-func (c *changesQueryBuilder) DocIDs(docIDs []string) ChangesQueryBuilder {
-	c.docIDs = docIDs
-	return c
-}
-
-func (c *changesQueryBuilder) Feed(feed string) ChangesQueryBuilder {
-	c.feed = feed
-	return c
-}
-
-func (c *changesQueryBuilder) Filter(filter string) ChangesQueryBuilder {
-	c.filter = filter
-	return c
-}
-
-func (c *changesQueryBuilder) Heartbeat(hb int) ChangesQueryBuilder {
-	c.heartbeat = hb
-	return c
-}
-
-func (c *changesQueryBuilder) IncludeDocs() ChangesQueryBuilder {
-	c.includeDocs = true
-	return c
-}
-
-func (c *changesQueryBuilder) Limit(lim int) ChangesQueryBuilder {
-	c.limit = lim
-	return c
-}
-
-func (c *changesQueryBuilder) SeqInterval(interval int) ChangesQueryBuilder {
-	c.seqInterval = interval
-	return c
-}
-
-func (c *changesQueryBuilder) Since(seq string) ChangesQueryBuilder {
-	if seq != "" {
-		c.since = seq
-	}
-	return c
-}
-
-func (c *changesQueryBuilder) Style(style string) ChangesQueryBuilder {
-	c.style = style
-	return c
-}
-
-func (c *changesQueryBuilder) Timeout(secs int) ChangesQueryBuilder {
-	c.timeout = secs
-	return c
-}
-
-// GetQuery implements the QueryBuilder interface. It returns an
-// url.Values map with the non-default values set.
-func (cq *changesQuery) GetQuery() (url.Values, error) {
-	vals := url.Values{}
-	if cq.Conflicts {
-		vals.Set("conflicts", "true")
-	}
-	if cq.Descending {
-		vals.Set("descending", "true")
-	}
-	if len(cq.DocIDs) > 0 {
-		data, err := json.Marshal(cq.DocIDs)
-		if err != nil {
-			return nil, err
+// DocIDs applies doc_ids=(doc_ids) parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) DocIDs(docIDs []string) *ChangesQuery {
+	if len(docIDs) > 0 {
+		data, err := json.Marshal(docIDs)
+		if err == nil {
+			q.Values.Set("doc_ids", string(data[:]))
 		}
-		vals.Set("doc_ids", string(data[:]))
 	}
-	if cq.IncludeDocs {
-		vals.Set("include_docs", "true")
-	}
-	if cq.Feed != "" {
-		vals.Set("feed", cq.Feed)
-	}
-	if cq.Filter != "" {
-		vals.Set("filter", cq.Filter)
-	}
-	if cq.Heartbeat > 0 {
-		vals.Set("heartbeat", strconv.Itoa(cq.Heartbeat))
-	}
-	if cq.Limit > 0 {
-		vals.Set("limit", strconv.Itoa(cq.Limit))
-	}
-	if cq.SeqInterval > 0 {
-		vals.Set("seq_interval", strconv.Itoa(cq.SeqInterval))
-	}
-	if cq.Style != "" {
-		vals.Set("style", cq.Style)
-	}
-	if cq.Since != "" {
-		vals.Set("since", cq.Since)
-	}
-	if cq.Timeout > 0 {
-		vals.Set("timeout", strconv.Itoa(cq.Timeout))
-	}
-	return vals, nil
+	return q
 }
 
-func (c *changesQueryBuilder) Build() *changesQuery {
-	return &changesQuery{
-		Conflicts:   c.conflicts,
-		Descending:  c.descending,
-		Feed:        c.feed,
-		Filter:      c.filter,
-		Heartbeat:   c.heartbeat,
-		IncludeDocs: c.includeDocs,
-		Limit:       c.limit,
-		SeqInterval: c.seqInterval,
-		Since:       c.since,
-		Style:       c.style,
-		Timeout:     c.timeout,
+// Feed applies feed=(feed) parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Feed(feed string) *ChangesQuery {
+	if feed != "" {
+		q.Values.Set("feed", feed)
 	}
+	return q
+}
+
+// Filter applies filter=(filter) parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Filter(filter string) *ChangesQuery {
+	if filter != "" {
+		q.Values.Set("filter", filter)
+	}
+	return q
+}
+
+// Heartbeat applies heartbeat parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Heartbeat(heartbeat int) *ChangesQuery {
+	if heartbeat > 0 {
+		q.Values.Set("heartbeat", strconv.Itoa(heartbeat))
+	}
+	return q
+}
+
+// IncludeDocs applies include_docs=true parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) IncludeDocs() *ChangesQuery {
+	q.Values.Set("include_docs", "true")
+	return q
+}
+
+// Limit applies limit parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Limit(lim int) *ChangesQuery {
+	if lim > 0 {
+		q.Values.Set("limit", strconv.Itoa(lim))
+	}
+	return q
+}
+
+// SeqInterval applies seq_interval parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) SeqInterval(interval int) *ChangesQuery {
+	if interval > 0 {
+		q.Values.Set("seq_interval", strconv.Itoa(interval))
+	}
+	return q
+}
+
+// Since applies since=(since) parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Since(since string) *ChangesQuery {
+	if since != "" {
+		q.Values.Set("since", since)
+	}
+	return q
+}
+
+// Style applies style=(style) parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Style(style string) *ChangesQuery {
+	if style != "" {
+		q.Values.Set("style", style)
+	}
+	return q
+}
+
+// Timeout applies seq_interval parameter to Cloudant ChangesQuery
+func (q *ChangesQuery) Timeout(timeout int) *ChangesQuery {
+	if timeout > 0 {
+		q.Values.Set("timeout", strconv.Itoa(timeout))
+	}
+	return q
 }

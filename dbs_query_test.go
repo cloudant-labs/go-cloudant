@@ -20,16 +20,14 @@ func TestAllDBsQuery_Args(t *testing.T) {
 		"skip=32",
 	}
 
-	query := NewAllDBsQuery().
+	query := NewDBsQuery().
 		InclusiveEnd().
 		Limit(5).
 		StartKey("db1").
 		Skip(32).
-		EndKey("db2").
-		Build()
+		EndKey("db2")
 
-	values, _ := query.GetQuery()
-	queryString := values.Encode()
+	queryString := query.Values.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

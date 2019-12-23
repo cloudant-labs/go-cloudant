@@ -2,9 +2,30 @@ package cloudant
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"strings"
 )
+
+// Change represents a part returned by _changes
+type Change struct {
+	ID      string
+	Rev     string
+	Seq     string
+	Deleted bool
+	Doc     map[string]interface{} // Only present if Changes() called with include_docs=true
+}
+
+// ChangeRow represents a part returned by _changes
+type ChangeRow struct {
+	ID      string                 `json:"id"`
+	Seq     string                 `json:"seq"` // If using CouchDB1.6, this is a number
+	Changes []ChangeRowChanges     `json:"changes"`
+	Deleted bool                   `json:"deleted"`
+	Doc     map[string]interface{} `json:"doc"`
+}
 
 // Constants defining the possible event types in a changes feed
 const (
@@ -39,6 +60,107 @@ type Follower struct {
 	seqInterval int
 }
 
+// UnmarshalJSON is here for coping with CouchDB1.6's sequence IDs being
+// numbers, not strings as in Cloudant and CouchDB2.X.
+//
+// See https://play.golang.org/p/BytXCeHMvt
+func (c *ChangeRow) UnmarshalJSON(data []byte) error {
+	// Create a new type with same structure as ChangeRow but without its method set
+	// to avoid an infinite `UnmarshalJSON` call stack
+	type ChangeRow16 ChangeRow
+	changeRow := struct {
+		ChangeRow16
+		Seq json.Number `json:"seq"`
+	}{ChangeRow16: ChangeRow16(*c)}
+
+	if err := json.Unmarshal(data, &changeRow); err != nil {
+		return err
+	}
+
+	*c = ChangeRow(changeRow.ChangeRow16)
+	c.Seq = changeRow.Seq.String()
+
+	return nil
+}
+
+// ChangeRowChanges represents a part returned by _changes
+type ChangeRowChanges struct {
+	Rev string `json:"rev"`
+}
+
+// Changes returns a channel in which Change types can be received.
+// See: https://console.bluemix.net/docs/services/Cloudant/api/database.html#get-changes
+func (d *Database) Changes(params url.Values) (<-chan *Change, error) {
+	verb := "GET"
+	var body []byte
+	var err error
+	if docIDsParm, ok := params["doc_ids"]; ok {
+		// If we're given a "doc_ids" argument, we're better off with a POST
+		var docIDs []string
+		_ = json.Unmarshal([]byte(docIDsParm[0]), &docIDs)
+		body, err = json.Marshal(map[string][]string{"doc_ids": docIDs})
+		if err != nil {
+			return nil, err
+		}
+		verb = "POST"
+		delete(params, "doc_ids")
+	}
+
+	urlStr, err := Endpoint(*d.URL, "/_changes", params)
+	if err != nil {
+		return nil, err
+	}
+	job, err := d.client.request(verb, urlStr, bytes.NewReader(body))
+	if err != nil {
+		job.done()
+		return nil, err
+	}
+
+	err = expectedReturnCodes(job, 200)
+	if err != nil {
+		job.done()
+		return nil, err
+	}
+
+	changes := make(chan *Change, 1000)
+
+	go func(job *Job, changes chan<- *Change) {
+		defer job.Close()
+		defer close(changes)
+
+		reader := bufio.NewReader(job.response.Body)
+
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				return
+			}
+			lineStr := string(line)
+			lineStr = strings.TrimSpace(lineStr)      // remove whitespace
+			lineStr = strings.TrimRight(lineStr, ",") // remove trailing comma
+
+			if len(lineStr) > 7 && lineStr[0:7] == "{\"seq\":" {
+				var change = new(ChangeRow)
+
+				err := json.Unmarshal([]byte(lineStr), change)
+				if err == nil && len(change.Changes) == 1 {
+					changes <- &Change{
+						ID:      change.ID,
+						Rev:     change.Changes[0].Rev,
+						Seq:     change.Seq,
+						Doc:     change.Doc,
+						Deleted: change.Deleted,
+					}
+				} else {
+					fmt.Println(err)
+				}
+			}
+		}
+	}(job, changes)
+
+	return changes, nil
+}
+
 // eventType tries to classify the current event as insert, delete or update.
 // This is problematic: https://pouchdb.com/guides/changes.html#understanding-changes
 // Under certain circumstances, the INSERT may be missed.
@@ -53,9 +175,9 @@ func eventType(change *ChangeRow) int {
 }
 
 // NewFollower creates a Follower on database's changes
-func NewFollower(database *Database, interval int) *Follower {
+func (d *Database) NewFollower(interval int) *Follower {
 	follower := &Follower{
-		db:          database,
+		db:          d,
 		stop:        make(chan struct{}),
 		stopped:     make(chan struct{}),
 		seqInterval: interval,
@@ -71,18 +193,14 @@ func (f *Follower) Close() {
 
 // Follow starts listening to the changes feed
 func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
-	query := NewChangesQuery().
+	params := NewChangesQuery().
 		IncludeDocs().
 		Feed("continuous").
 		Since(f.since).
 		Heartbeat(10).
-		Timeout(30)
-
-	if f.seqInterval > 0 {
-		query = query.SeqInterval(f.seqInterval)
-	}
-
-	params, _ := query.Build().GetQuery()
+		Timeout(30).
+		SeqInterval(f.seqInterval).
+		Values
 
 	urlStr, err := Endpoint(*f.db.URL, "/_changes", params)
 	if err != nil {
