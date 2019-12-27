@@ -32,7 +32,7 @@ func TestViewQuery(t *testing.T) {
 		RevsInfo().
 		Skip(32)
 
-	queryString := viewQuery.Values.Encode()
+	queryString := viewQuery.URLValues.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

@@ -44,7 +44,7 @@ func TestGetQuery_GetArgs(t *testing.T) {
 		Revs().
 		RevsInfo()
 
-	queryString := query.Values.Encode()
+	queryString := query.URLValues.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

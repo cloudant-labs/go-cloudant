@@ -43,7 +43,7 @@ func TestChangesQuery_Args(t *testing.T) {
 		Style("alldocs").
 		Timeout(10)
 
-	queryString := params.Values.Encode()
+	queryString := params.URLValues.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

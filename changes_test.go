@@ -18,7 +18,7 @@ func TestDatabase_StaticChanges(t *testing.T) {
 
 	makeDocuments(database, 1000)
 
-	changes, err := database.Changes(NoParams())
+	changes, err := database.Changes(NewChangesQuery())
 	if err != nil {
 		t.Error(err)
 	}
@@ -49,11 +49,10 @@ func TestDatabase_ChangesIncludeDocs(t *testing.T) {
 	}()
 
 	makeDocuments(database, 1000)
-	params := NewChangesQuery().
-		IncludeDocs().
-		Values
+	q := NewChangesQuery().
+		IncludeDocs()
 
-	changes, err := database.Changes(params)
+	changes, err := database.Changes(q)
 	if err != nil {
 		t.Error(err)
 	}
@@ -88,12 +87,11 @@ func TestDatabase_ContinousChanges(t *testing.T) {
 
 	makeDocuments(database, 1000)
 
-	params := NewChangesQuery().
+	q := NewChangesQuery().
 		Feed("continuous").
-		Timeout(10).
-		Values
+		Timeout(10)
 
-	changes, err := database.Changes(params)
+	changes, err := database.Changes(q)
 	if err != nil {
 		t.Error(err)
 	}
@@ -125,11 +123,10 @@ func TestDatabase_ChangesSeqInterval(t *testing.T) {
 
 	makeDocuments(database, 1000)
 
-	params := NewChangesQuery().
-		SeqInterval(100).
-		Values
+	q := NewChangesQuery().
+		SeqInterval(100)
 
-	changes, err := database.Changes(params)
+	changes, err := database.Changes(q)
 	if err != nil {
 		t.Error(err)
 	}

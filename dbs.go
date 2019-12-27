@@ -36,8 +36,8 @@ type Sizes struct {
 }
 
 // List returns a list of all DBs
-func (c *CouchClient) List(params url.Values) (*[]string, error) {
-	urlStr, err := Endpoint(*c.rootURL, "/_all_dbs", params)
+func (c *CouchClient) List(q *DBsQuery) (*[]string, error) {
+	urlStr, err := Endpoint(*c.rootURL, "/_all_dbs", q.URLValues)
 	if err != nil {
 		return nil, err
 	}

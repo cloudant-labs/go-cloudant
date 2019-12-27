@@ -14,8 +14,8 @@ type DocumentMeta struct {
 
 // Get a document from the database.
 // See: https://console.bluemix.net/docs/services/Cloudant/api/document.html#read
-func (d *Database) Get(documentID string, params url.Values, target interface{}) error {
-	urlStr, err := Endpoint(*d.URL, documentID, params)
+func (d *Database) Get(documentID string, q *DocQuery, target interface{}) error {
+	urlStr, err := Endpoint(*d.URL, documentID, q.URLValues)
 	if err != nil {
 		return err
 	}

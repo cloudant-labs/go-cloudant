@@ -40,17 +40,6 @@ type CouchClient struct {
 	workerCount   int
 }
 
-// QueryBuilder is used by functions implementing Cloudant API calls
-// that have many optional parameters
-type QueryBuilder interface {
-	GetQuery() (url.Values, error)
-}
-
-// NoParams returns empty query parameter values as a shortcut for default queries
-func NoParams() url.Values {
-	return url.Values{}
-}
-
 // Endpoint is a convenience function to build url-strings
 func Endpoint(base url.URL, pathStr string, params url.Values) (string, error) {
 	base.Path = path.Join(base.Path, pathStr)

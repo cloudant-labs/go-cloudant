@@ -27,7 +27,7 @@ func TestAllDBsQuery_Args(t *testing.T) {
 		Skip(32).
 		EndKey("db2")
 
-	queryString := query.Values.Encode()
+	queryString := query.URLValues.Encode()
 
 	for _, str := range expectedQueryStrings {
 		if !strings.Contains(queryString, str) {

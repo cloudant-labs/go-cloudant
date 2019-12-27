@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 )
 
@@ -90,23 +89,20 @@ type ChangeRowChanges struct {
 
 // Changes returns a channel in which Change types can be received.
 // See: https://console.bluemix.net/docs/services/Cloudant/api/database.html#get-changes
-func (d *Database) Changes(params url.Values) (<-chan *Change, error) {
+func (d *Database) Changes(q *ChangesQuery) (<-chan *Change, error) {
 	verb := "GET"
 	var body []byte
 	var err error
-	if docIDsParm, ok := params["doc_ids"]; ok {
+	if len(q.DocIDValues) > 0 {
 		// If we're given a "doc_ids" argument, we're better off with a POST
-		var docIDs []string
-		_ = json.Unmarshal([]byte(docIDsParm[0]), &docIDs)
-		body, err = json.Marshal(map[string][]string{"doc_ids": docIDs})
+		body, err = json.Marshal(map[string][]string{"doc_ids": q.DocIDValues})
 		if err != nil {
 			return nil, err
 		}
 		verb = "POST"
-		delete(params, "doc_ids")
 	}
 
-	urlStr, err := Endpoint(*d.URL, "/_changes", params)
+	urlStr, err := Endpoint(*d.URL, "/_changes", q.URLValues)
 	if err != nil {
 		return nil, err
 	}
@@ -193,16 +189,15 @@ func (f *Follower) Close() {
 
 // Follow starts listening to the changes feed
 func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
-	params := NewChangesQuery().
+	q := NewChangesQuery().
 		IncludeDocs().
 		Feed("continuous").
 		Since(f.since).
 		Heartbeat(10).
 		Timeout(30).
-		SeqInterval(f.seqInterval).
-		Values
+		SeqInterval(f.seqInterval)
 
-	urlStr, err := Endpoint(*f.db.URL, "/_changes", params)
+	urlStr, err := Endpoint(*f.db.URL, "/_changes", q.URLValues)
 	if err != nil {
 		return nil, err
 	}

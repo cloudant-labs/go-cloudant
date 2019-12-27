@@ -32,7 +32,7 @@ func TestAllDBs(t *testing.T) {
 	}()
 
 	allDBs := map[string]bool{}
-	dbList, err := client.List(NoParams())
+	dbList, err := client.List(NewDBsQuery())
 	for _, item := range *dbList {
 		allDBs[item] = true
 	}
@@ -76,8 +76,8 @@ func TestAllDBs_StartKeyEndKey(t *testing.T) {
 		}
 	}()
 
-	params := NewDBsQuery().StartKey("bbbb").EndKey("bbbb5").Values
-	dbList, err := client.List(params)
+	q := NewDBsQuery().StartKey("bbbb").EndKey("bbbb5")
+	dbList, err := client.List(q)
 	if len(*dbList) != dbCount {
 		t.Errorf("expected %d databases, found %d", dbCount, len(*dbList))
 	}
@@ -114,8 +114,8 @@ func TestAllDBs_Limit(t *testing.T) {
 		}
 	}()
 
-	params := NewDBsQuery().Limit(limit).Values
-	dbList, err := client.List(params)
+	q := NewDBsQuery().Limit(limit)
+	dbList, err := client.List(q)
 	if len(*dbList) != limit {
 		t.Errorf("expected %d databases, found %d", limit, len(*dbList))
 	}

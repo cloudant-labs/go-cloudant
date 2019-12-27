@@ -21,7 +21,7 @@ func TestDatabase_Error4XX(t *testing.T) {
 
 	doc := &cloudantDocument{}
 
-	err = database.Get("NOTHERE", NoParams(), doc)
+	err = database.Get("NOTHERE", NewDocQuery(), doc)
 	if err == nil {
 		t.Errorf("Expected a 404 error, got nil")
 		return
@@ -48,7 +48,7 @@ func TestDatabase_Get(t *testing.T) {
 	makeDocuments(database, 10)
 
 	doc := &cloudantDocument{}
-	database.Get("doc-002", NoParams(), doc)
+	database.Get("doc-002", NewDocQuery(), doc)
 
 	if doc.ID != "doc-002" {
 		t.Error("failed to fetch document")
@@ -111,11 +111,10 @@ func TestDatabase_GetWithRev(t *testing.T) {
 	// Note: lame attempt to close inconsistency window
 	time.Sleep(500 * time.Millisecond)
 
-	params := NewDocQuery().
-		Rev(meta1.Rev).
-		Values
+	q := NewDocQuery().
+		Rev(meta1.Rev)
 
-	err3 := database.Get("doc-new", params, doc2)
+	err3 := database.Get("doc-new", q, doc2)
 	if err3 != nil {
 		t.Errorf("unexpected error %s", err3)
 		return
@@ -127,11 +126,10 @@ func TestDatabase_GetWithRev(t *testing.T) {
 	}
 
 	// Use the latest revision
-	params = NewDocQuery().
-		Rev(meta2.Rev).
-		Values
+	q = NewDocQuery().
+		Rev(meta2.Rev)
 
-	err4 := database.Get("doc-new", params, doc2)
+	err4 := database.Get("doc-new", q, doc2)
 	if err4 != nil {
 		t.Errorf("failed to fetch revision %s: %s", meta2.Rev, err4)
 		return

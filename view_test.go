@@ -17,12 +17,11 @@ func TestDatabase_List(t *testing.T) {
 
 	makeDocuments(database, 1000)
 
-	params := NewViewQuery().
+	q := NewViewQuery().
 		StartKey("doc-450").
-		EndKey("doc-500").
-		Values
+		EndKey("doc-500")
 
-	rows, err := database.List(params)
+	rows, err := database.List(q)
 	if err != nil {
 		t.Error(err)
 	}
@@ -60,11 +59,10 @@ func TestDatabase_AllDocKeys(t *testing.T) {
 		"doc-997",
 	}
 
-	params := NewViewQuery().
-		Keys(keys).
-		Values
+	q := NewViewQuery().
+		Keys(keys)
 
-	rows, err := database.List(params)
+	rows, err := database.List(q)
 	if err != nil {
 		t.Error(err)
 	}
@@ -96,11 +94,10 @@ func TestDatabase_AllDocKey(t *testing.T) {
 
 	makeDocuments(database, 100)
 
-	params := NewViewQuery().
-		Key("doc-032").
-		Values
+	q := NewViewQuery().
+		Key("doc-032")
 
-	rows, err := database.List(params)
+	rows, err := database.List(q)
 	if err != nil {
 		t.Error(err)
 	}
@@ -153,19 +150,25 @@ func TestView(t *testing.T) {
 		"doc-014", // matches view, will be returned
 	}
 
-	params := NewViewQuery().
-		Keys(keys).
-		Values
+	q := NewViewQuery().
+		Keys(keys)
 
-	myView := new(View)
-	err = database.View("test_design_doc", "start_with_one", params, &myView)
+	rows, err := database.View("test_design_doc", "start_with_one", q)
 	if err != nil {
 		t.Error(err)
 	}
 
-	n := len(myView.Rows)
+	i := 0
+	for {
+		_, more := <-rows
+		if more {
+			i++
+		} else {
+			break
+		}
+	}
 
-	if 2 != n {
-		t.Errorf("unexpected number of rows received from view - %d", n)
+	if 2 != i {
+		t.Errorf("unexpected number of rows received from view - %d", i)
 	}
 }

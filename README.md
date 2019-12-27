@@ -61,11 +61,11 @@ fmt.Println(info.DocCount) // prints the number of documents in the database
 
 ```
 
-### `client.List(params)`
+### `client.List(dbsQuery)`
 
 List existing databases
 ```go
-dbList, err := client.List(NoParams())
+dbList, err := client.List(cloudant.NewDBsQuery())
 for _, name := range *dbList {
     fmt.Println(name) // prints database names
 }
@@ -85,14 +85,14 @@ Create (if does not exist) and use a database:
 db, err := client.UseOrCreate("my_database")
 ```
 
-### `db.Changes(params)`
+### `db.Changes(changesQuery)`
 
 Get changes feed from the database
 
 ```go
-params := cloudant.NewChangesQuery().IncludeDocs().Values
+q := cloudant.NewChangesQuery().IncludeDocs()
 
-changes, err := db.Changes(params)
+changes, err := db.Changes(q)
 
 for {
     change, more := <-changes
@@ -159,7 +159,7 @@ Removes a document from database
 err := db.Destroy("my_doc_id", "2-xxxxxxx")
 ```
 
-### `db.Get(docID, params, doc)`
+### `db.Get(docID, docQuery, doc)`
 
 Gets a document from Cloudant whose _id is docID and unmarshals it into doc struct
 ```go
@@ -170,7 +170,7 @@ type Doc struct {
 }
 
 doc = new(Doc)
-err = db.Get("my_doc_id", cloudant.NoParams(), doc)
+err = db.Get("my_doc_id", cloudant.NewDocQuery(), doc)
 
 fmt.Println(doc.Foo)  // prints 'foo' key
 ```
@@ -269,24 +269,23 @@ if r3.Error != nil {
 
 ## Views functions 
 
-### `db.List(params)`
+### `db.List(viewQuery)`
 
 List all the docs in the database (`_all_docs` view)
 
 ```go
-rows, err := db.List(cloudant.NoParams())
+rows, err := db.List(cloudant.NewViewQuery())
 
 // OR include some query options...
 //
-// p := cloudant.NewViewQuery().
+// q := cloudant.NewViewQuery().
 //        Limit(123).
 //        StartKey("foo1").
-//        EndKey("foo2").
-//        Values
+//        EndKey("foo2")
 //
-// rows, err := db.List(p)
+// rows, err := db.List(q)
 
-for{
+for {
     row, more := <-rows
     if more {
         fmt.Println(row.ID, row.Value.Rev)  // prints document 'id' and 'rev'
@@ -296,48 +295,55 @@ for{
 }
 ```
 
-### `db.View(designName, viewName, params, view)`
+### `db.View(designName, viewName, viewQuery, view)`
 
 Calls a view of the specified designName and decodes the result using provided interface
 
 ```go
-type Doc struct {
+type MyRow struct {
+	ID    string `json:"id"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	Doc   MyDoc  `json:"doc"`
+}
+type MyDoc struct {
 	ID  string `json:"_id,omitempty"`
 	Rev string `json:"_rev,omitempty"`
 	Foo string `json:"foo" binding:"required"`
 }
 
-type DocsView struct {
-	Rows  []DocsViewRow `json:"rows"`
-	Error string        `json:"error"`
-}
-
-type DocsViewRow struct {
-	ID    string `json:"id"`
-	Key   string `json:"key"`
-	Value string `json:"value"`
-	Doc   Doc    `json:"doc"`
-}
 
 myView := new(DocsView)
-params := cloudant.NewViewQuery().
+q := cloudant.NewViewQuery().
     Descending().
     Key("foo1").
     Limit(1).
-    IncludeDocs().
-    Values
+    IncludeDocs()
 
-err := db.View("my_design_name", "my_view_name", params, myView)
+rows, err := db.View("my_design_name", "my_view_name", q, myView)
+
+for {
+    row, more := <-rows
+    if more {
+        r := new(MyRow)
+        err = json.Unmarshal(row.([]byte), r)
+        if err == nil {
+            fmt.Println(r.Doc.ID, r.Doc.Rev, r.Doc.Foo)  // prints document 'id', 'rev', and 'foo' value
+        }
+    } else {
+        break
+    }
+}
 ```
 
-### `db.ViewRaw(designName, viewName, params)`
+### `db.ViewRaw(designName, viewName, viewQuery)`
 
 Calls a view of the specified designName and returns raw []byte response. This allows querying views with arbitrary output such as when using reduce.
 
 ```go
 import "github.com/buger/jsonparser"
 
-response, err := db.ViewRaw("my_design_name", "my_view_name", cloudant.NoParams())
+response, err := db.ViewRaw("my_design_name", "my_view_name", cloudant.NewViewQuery())
 
 if err != nil {
     value, decodeErr := jsonparser.Get(response, "total_rows")

@@ -2,10 +2,23 @@ package cloudant
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 )
+
+// AllRow represents a row in the json array returned by all_docs
+type AllRow struct {
+	ID    string      `json:"id"`
+	Value AllRowValue `json:"value"`
+	Doc   interface{} `json:"doc"`
+}
+
+// AllRowValue represents a part returned by _all_docs
+type AllRowValue struct {
+	Rev string `json:"rev"`
+}
 
 func TestBulk_AsyncFlush(t *testing.T) {
 	database, err := makeDatabase()
@@ -99,13 +112,17 @@ func TestBulk_NewEditsFalse(t *testing.T) {
 	// problem on travis/docker...
 	time.Sleep(10 * time.Second)
 
-	rows, err := database.List(NoParams())
+	rows, err := database.List(NewViewQuery())
 	foundRevs := map[string]string{}
 	for {
 		row, more := <-rows
 		if more {
-			if r, ok := myRevs[row.ID]; ok && r == row.Value.Rev {
-				foundRevs[row.ID] = row.Value.Rev
+			r := new(AllRow)
+			err = json.Unmarshal(row.([]byte), r)
+			if err == nil {
+				if rev, ok := myRevs[r.ID]; ok && rev == r.Value.Rev {
+					foundRevs[r.ID] = r.Value.Rev
+				}
 			}
 		} else {
 			break
