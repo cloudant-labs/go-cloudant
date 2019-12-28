@@ -86,13 +86,13 @@ func (j *Job) Wait() { <-j.isDone }
 
 type worker struct {
 	id       int
-	client   *CouchClient
+	client   *Client
 	jobsChan chan *Job
 	quitChan chan bool
 }
 
 // Create a new HTTP pool worker.
-func newWorker(id int, client *CouchClient) worker {
+func newWorker(id int, client *Client) worker {
 	worker := worker{
 		id:       id,
 		client:   client,
@@ -131,7 +131,7 @@ func (w *worker) start() {
 			job.request.Body = ioutil.NopCloser(bytes.NewReader(job.bodyBytes))
 
 			// add go-cloudant UA
-			job.request.Header.Add("User-Agent", "go-cloudant/"+VERSION+"/"+runtime.Version())
+			job.request.Header.Add("User-Agent", "go-cloudant/"+worker.client.version+"/"+runtime.Version())
 
 			resp, err := worker.client.httpClient.Do(job.request)
 
@@ -205,7 +205,7 @@ func (w *worker) stop() {
 	}()
 }
 
-func startDispatcher(client *CouchClient) {
+func startDispatcher(client *Client) {
 	client.workers = make([]*worker, client.workerCount)
 	client.workerChan = make(chan chan *Job, client.workerCount)
 

@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path"
+	"runtime/debug"
 	"time"
 )
 
@@ -25,8 +26,8 @@ var handshakeTimeoutTLS = 10 * time.Second
 var responseHeaderTimeout = 10 * time.Second
 var expectContinueTimeout = 1 * time.Second
 
-// CouchClient is the representation of a client connection
-type CouchClient struct {
+// Client is the representation of a client connection
+type Client struct {
 	username      string
 	password      string
 	rootURL       *url.URL
@@ -38,6 +39,47 @@ type CouchClient struct {
 	workers       []*worker
 	workerChan    chan chan *Job
 	workerCount   int
+	version       string
+}
+
+// ClientOption is a functional option setter for Client
+type ClientOption func(*Client)
+
+// ClientConcurrency overrides default workerCount Client option
+func ClientConcurrency(workerCount int) ClientOption {
+	return func(c *Client) {
+		if workerCount > 0 {
+			c.workerCount = workerCount
+		}
+	}
+}
+
+// ClientRetryCountMax overrides default retryCountMax Client option
+func ClientRetryCountMax(retryCountMax int) ClientOption {
+	return func(c *Client) {
+		c.retryCountMax = retryCountMax
+	}
+}
+
+// ClientRetryDelayMin overrides default retryDelayMin Client option
+func ClientRetryDelayMin(retryDelayMin int) ClientOption {
+	return func(c *Client) {
+		c.retryDelayMin = retryDelayMin
+	}
+}
+
+// ClientRetryDelayMax overrides default retryDelayMax Client option
+func ClientRetryDelayMax(retryDelayMax int) ClientOption {
+	return func(c *Client) {
+		c.retryDelayMax = retryDelayMax
+	}
+}
+
+// ClientHTTPClient overrides default httpClient option
+func ClientHTTPClient(httpClient *http.Client) ClientOption {
+	return func(c *Client) {
+		c.httpClient = httpClient
+	}
 }
 
 // Endpoint is a convenience function to build url-strings
@@ -47,21 +89,21 @@ func Endpoint(base url.URL, pathStr string, params url.Values) (string, error) {
 	return base.String(), nil
 }
 
-// CreateClient returns a new client (with max. retry 3 using a random 5-30 secs delay).
-func CreateClient(username, password, rootStrURL string, concurrency int) (*CouchClient, error) {
-	if concurrency <= 0 {
-		return nil, fmt.Errorf("Concurrency must be >= 1")
-	}
-	return CreateClientWithRetry(username, password, rootStrURL, concurrency, 3, 5, 30)
-}
-
-// CreateClientWithRetry returns a new client with configurable retry parameters
-func CreateClientWithRetry(username, password, rootStrURL string, concurrency, retryCountMax,
-	retryDelayMin, retryDelayMax int) (*CouchClient, error) {
+// NewClient returns a new Cloudant client
+func NewClient(username, password, rootStrURL string, options ...ClientOption) (*Client, error) {
 
 	rand.Seed(time.Now().Unix()) // seed value for job retry start delays
 
 	cookieJar, _ := cookiejar.New(nil)
+
+	// Get current module version for pool request identification
+	bi, ok := debug.ReadBuildInfo()
+	var version string
+	if ok {
+		version = bi.Main.Version
+	} else {
+		version = "(devel)"
+	}
 
 	c := &http.Client{
 		Jar: cookieJar,
@@ -81,30 +123,36 @@ func CreateClientWithRetry(username, password, rootStrURL string, concurrency, r
 		return nil, err
 	}
 
-	couchClient := CouchClient{
+	client := Client{
 		username:      username,
 		password:      password,
 		rootURL:       apiURL,
 		httpClient:    c,
 		jobQueue:      make(chan *Job, 100),
-		retryCountMax: retryCountMax,
-		retryDelayMin: retryDelayMin,
-		retryDelayMax: retryDelayMax,
-		workerCount:   concurrency,
+		retryCountMax: 3,  // default triple retry
+		retryDelayMin: 5,  // default minimum retry delay of 5 seconds
+		retryDelayMax: 30, // default maximum retry delay of 30 seconds
+		workerCount:   5,  // default concurrency of 5 workers
+		version:       version,
 	}
 
-	startDispatcher(&couchClient) // start workers
+	// Apply functional options
+	for _, f := range options {
+		f(&client)
+	}
 
-	err = couchClient.LogIn() // create initial session
+	startDispatcher(&client) // start workers
+
+	err = client.LogIn() // create initial session
 	if err != nil {
 		return nil, err
 	}
 
-	return &couchClient, nil
+	return &client, nil
 }
 
 // LogIn creates a session.
-func (c *CouchClient) LogIn() error {
+func (c *Client) LogIn() error {
 	sessionURL := c.rootURL.String() + "/_session"
 
 	data := url.Values{}
@@ -138,13 +186,13 @@ func (c *CouchClient) LogIn() error {
 }
 
 // LogOut deletes the current session.
-func (c *CouchClient) LogOut() {
+func (c *Client) LogOut() {
 	sessionURL := c.rootURL.String() + "/_session"
 	job, _ := c.request("DELETE", sessionURL, nil) // ignore failures
 	job.Close()
 }
 
-func (c *CouchClient) request(method, path string, body io.Reader) (job *Job, err error) {
+func (c *Client) request(method, path string, body io.Reader) (job *Job, err error) {
 	req, err := http.NewRequest(method, path, body)
 	if err != nil {
 		return nil, err
@@ -169,11 +217,11 @@ func (c *CouchClient) request(method, path string, body io.Reader) (job *Job, er
 // Execute submits a job for execution.
 // The client must call `job.Wait()` before attempting access the response attribute.
 // Always call `job.Close()` to ensure the underlying connection is terminated.
-func (c *CouchClient) Execute(job *Job) { c.jobQueue <- job }
+func (c *Client) Execute(job *Job) { c.jobQueue <- job }
 
 // Ping can be used to check whether a server is alive.
 // It sends an HTTP HEAD request to the server's URL.
-func (c *CouchClient) Ping() (err error) {
+func (c *Client) Ping() (err error) {
 	job, err := c.request("HEAD", c.rootURL.String(), nil)
 	job.Close()
 
@@ -182,7 +230,7 @@ func (c *CouchClient) Ping() (err error) {
 
 // Stop kills all running workers.
 // Once called the client is no longer able to execute new jobs.
-func (c *CouchClient) Stop() {
+func (c *Client) Stop() {
 	for _, worker := range c.workers {
 		worker.stop()
 	}

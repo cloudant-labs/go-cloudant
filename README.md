@@ -4,14 +4,14 @@ A [Cloudant](https://cloudant.com/) library for Golang.
 
 Forked from cloudant-labs and modified to align closer to NodeJS `nano` library. __This library is not complete, may change in incompatible ways in future versions, and comes with no support.__
 
-[![Build Status](https://travis-ci.org/cloudant-labs/go-cloudant.svg?branch=master)](https://travis-ci.org/cloudant-labs/go-cloudant)
+[![Build Status](https://travis-ci.org/barshociaj/go-cloudant.svg?branch=master)](https://travis-ci.org/barshociaj/go-cloudant)
 
 Features:
 - Session authentication
 - Keep-Alive & Connection Pooling
 - Configurable request retrying
 - Hard limit on request concurrency
-- Stream `/_all_docs` & `/_changes`
+- Stream  `/_changes`, `/_all_docs`, and other views
 - Manage `/_bulk_docs` uploads
 
 ## Installation
@@ -23,17 +23,16 @@ go get github.com/barshociaj/go-cloudant
 ## Getting Started
 
 ```go
-// create a Cloudant client (max. request concurrency 5) with default retry configuration:
+// create a Cloudant client with default configuration:
+//   - concurrency:                     5
 //   - maximum retries per request:     3
 //   - random retry delay minimum:      5  seconds
 //   - random retry delay maximum:      30 seconds
-client, err := cloudant.CreateClient("user123", "pa55w0rd01", "https://user123.cloudant.com", 5)
+client, err := cloudant.NewClient("user123", "pa55w0rd01", "https://user123.cloudant.com")
 
-// create a Cloudant client (max. request concurrency 20) with _custom_ retry configuration:
-//   - maximum retries per request:     5
-//   - random retry delay minimum:      10  seconds
-//   - random retry delay maximum:      60 seconds
-client1, err1 := cloudant.CreateClientWithRetry("user123", "pa55w0rd01", "https://user123.cloudant.com", 20, 5, 10, 60)
+// OR provide any number of custom client options
+//
+// client, err := cloudant.NewClient("user123", "pa55w0rd01", "https://user123.cloudant.com", cloudant.ClientConcurrency(20), cloudant.ClientRetryCountMax(5), cloudant.ClientRetryDelayMin(10), cloudant.ClientRetryDelayMax(60))
 ```
 
 ## Database functions

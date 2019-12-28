@@ -24,6 +24,8 @@ export COUCH_HOST_URL="http://127.0.0.1:5984"
 go test
 ```
 
+Basic docker set up script is also provided under [examples](examples/cloudant.sh)
+
 Note -- this library does not allow for unauthenticated connections, so you can't
 run against a CouchDB node in `admin party` mode. This is a good thing.
 

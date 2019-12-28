@@ -1,4 +1,4 @@
-# basic1 - basic example program
+# basic - basic example program
 
 ### Prequisites:
 * Access to a Cloudant instance. This example has a .env file where you can put your Cloudant instance details.
@@ -14,13 +14,13 @@ go get github.com/joho/godotenv
 ```
 
 ```
-go get github.com/cloudant-labs/go-cloudant
+go get github.com/barshociaj/go-cloudant
 ```
 
-Download the basic1 folder with contents to your go src directory.
+Download the basic folder with contents to your go src directory.
 
 ### Running the basic example program (main.go):
-Ensure that you are in the basic1 folder on your local machine, you have done the previous steps in this README file, your cloudant-developer Docker Container is running (if applicable), then issue the following command:
+Ensure that you are in the basic folder on your local machine, you have done the previous steps in this README file, your cloudant-developer Docker Container is running (if applicable), then issue the following command:
 
 ```
 go run main.go

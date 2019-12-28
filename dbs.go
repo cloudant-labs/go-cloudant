@@ -10,7 +10,7 @@ import (
 // Database holds a reference to an authenticated client connection and the
 // name of a remote database
 type Database struct {
-	client *CouchClient
+	client *Client
 	Name   string
 	URL    *url.URL
 }
@@ -36,7 +36,7 @@ type Sizes struct {
 }
 
 // List returns a list of all DBs
-func (c *CouchClient) List(q *DBsQuery) (*[]string, error) {
+func (c *Client) List(q *DBsQuery) (*[]string, error) {
 	urlStr, err := Endpoint(*c.rootURL, "/_all_dbs", q.URLValues)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (c *CouchClient) List(q *DBsQuery) (*[]string, error) {
 
 // Info returns database information.
 // See https://console.bluemix.net/docs/services/Cloudant/api/database.html#getting-database-details
-func (c *CouchClient) Info(databaseName string) (*Info, error) {
+func (c *Client) Info(databaseName string) (*Info, error) {
 	d, err := c.Use(databaseName)
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (c *CouchClient) Info(databaseName string) (*Info, error) {
 }
 
 // Destroy deletes a specified database.
-func (c *CouchClient) Destroy(databaseName string) error {
+func (c *Client) Destroy(databaseName string) error {
 	databaseURL, err := url.Parse(c.rootURL.String())
 	if err != nil {
 		return err
@@ -109,7 +109,7 @@ func (c *CouchClient) Destroy(databaseName string) error {
 
 // Exists checks the existence of a specified database.
 // Returns true if the database exists, else false.
-func (c *CouchClient) Exists(databaseName string) (bool, error) {
+func (c *Client) Exists(databaseName string) (bool, error) {
 	databaseURL, err := url.Parse(c.rootURL.String())
 	if err != nil {
 		return false, err
@@ -126,7 +126,7 @@ func (c *CouchClient) Exists(databaseName string) (bool, error) {
 }
 
 // Use returns a database. It is assumed to exist.
-func (c *CouchClient) Use(databaseName string) (*Database, error) {
+func (c *Client) Use(databaseName string) (*Database, error) {
 	databaseURL, err := url.Parse(c.rootURL.String())
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (c *CouchClient) Use(databaseName string) (*Database, error) {
 
 // UseOrCreate returns a database.
 // If the database doesn't exist on the server then it will be created.
-func (c *CouchClient) UseOrCreate(databaseName string) (*Database, error) {
+func (c *Client) UseOrCreate(databaseName string) (*Database, error) {
 	database, err := c.Use(databaseName)
 	if err != nil {
 		return nil, err

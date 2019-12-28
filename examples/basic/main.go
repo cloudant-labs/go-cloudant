@@ -1,10 +1,15 @@
+/**
+ * main
+ * - Example using Cloudant library directly
+ */
+
 package main
 
 import (
 	"log"
 	"os"
 
-	cldt "github.com/barshociaj/go-cloudant"
+	"github.com/barshociaj/go-cloudant"
 	"github.com/joho/godotenv"
 )
 
@@ -15,48 +20,38 @@ type Item struct {
 	Comment string `json:"comment"`
 }
 
-var cloudant *cldt.CouchClient
-var cloudantURL string
-var cloudantDB string
-var cloudantUser string
-var cloudantPass string
-
 func main() {
 
 	// Load Cloudant environment variables
 	err := godotenv.Load()
 	if err != nil {
-		log.Println(".env file does not exist")
-		log.Fatal(err)
+		log.Fatal(".env file does not exist", err)
 	}
 
 	// Set the Cloudant variables from the environment
-	cloudantURL = os.Getenv("CLOUDANT_URL")
-	cloudantDB = os.Getenv("CLOUDANT_DB")
-	cloudantUser = os.Getenv("CLOUDANT_USER")
-	cloudantPass = os.Getenv("CLOUDANT_PASS")
+	cloudantURL := os.Getenv("CLOUDANT_URL")
+	cloudantDB := os.Getenv("CLOUDANT_DB")
+	cloudantUser := os.Getenv("CLOUDANT_USER")
+	cloudantPass := os.Getenv("CLOUDANT_PASS")
 
 	// Create a Cloudant Client
-	cloudant, err2 := cldt.CreateClient(cloudantUser, cloudantPass, cloudantURL, 5)
+	client, err2 := cloudant.NewClient(cloudantUser, cloudantPass, cloudantURL)
 	if err2 != nil {
-		log.Println("Can not connect to Cloudant")
-		log.Fatal(err2)
+		log.Fatal("Can not connect to Cloudant", err2)
 	} else {
 		log.Println("Connected to Cloudant Successfully")
 	}
 
 	// Verify we have an active connection to the server
-	err3 := cloudant.Ping()
+	err3 := client.Ping()
 	if err3 != nil {
-		log.Println("Cloudant Ping failed")
-		log.Fatal(err3)
+		log.Fatal("Cloudant Ping failed", err3)
 	}
 
 	// Try to get the database specified in the .env file, if it does not exist it, create it
-	db, err4 := cloudant.UseOrCreate(cloudantDB)
+	db, err4 := client.UseOrCreate(cloudantDB)
 	if err4 != nil {
-		log.Println("Error getting or creating Cloudant DB")
-		log.Fatal(err4)
+		log.Fatal("Error getting or creating Cloudant DB", err4)
 	}
 
 	// Create a document in the items DB
@@ -66,9 +61,9 @@ func main() {
 
 	result, err5 := db.Insert(item)
 	if err5 != nil {
-		log.Println("Error creating a document")
-		log.Fatal(err5)
+		log.Fatal("Error creating a document", err5)
 	}
+
 	// Log the _id and revision number
 	log.Println(result)
 }
