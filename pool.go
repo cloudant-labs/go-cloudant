@@ -108,11 +108,6 @@ var workerFunc func(worker *worker, job *Job) // func executed by workers
 // Generates a random int within the range [min, max]
 func random(min, max int) int { return rand.Intn(max-min) + min }
 
-// CredentialsExpiredResponse holds credentials error message
-type CredentialsExpiredResponse struct {
-	Error string `json:"error"`
-}
-
 func (w *worker) start() {
 	if workerFunc == nil {
 		workerFunc = func(worker *worker, job *Job) {
@@ -135,34 +130,21 @@ func (w *worker) start() {
 
 			resp, err := worker.client.httpClient.Do(job.request)
 
-			var retry bool
+			retry := false
 			if err != nil {
 				LogFunc("failed to submit request, %s", err)
 				retry = true
 			} else {
 				switch resp.StatusCode {
-				case 401:
+				case 401, 403:
+					// Retry login after 403 too to handle temporary firewall errors in addition to credentials_expired
 					if !job.isLogin {
-						LogFunc("renewing session")
+						LogFunc("renewing session after %v", resp.StatusCode)
 						w.client.LogIn()
 						retry = true
 					}
-				case 403:
-					response := &CredentialsExpiredResponse{}
-					err = json.NewDecoder(resp.Body).Decode(response)
-
-					retry = false
-					if err == nil && response.Error == "credentials_expired" {
-						LogFunc("renewing session")
-						w.client.LogIn()
-						retry = true
-					}
-				case 429:
+				case 429, 500, 501, 502, 503, 504:
 					retry = true
-				case 500, 501, 502, 503, 504:
-					retry = true
-				default:
-					retry = false
 				}
 			}
 

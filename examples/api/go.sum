@@ -1,5 +1,7 @@
 github.com/barshociaj/go-cloudant v0.2.0 h1:Py2ebKtsCKfSKBZ8c/e95KjFPfddlc0A4yhjyw0ClJw=
 github.com/barshociaj/go-cloudant v0.2.0/go.mod h1:54ntrzvw787WPVZ7IOoWo3jxwMWrXR2imhsxWgZdLdc=
+github.com/barshociaj/go-cloudant v0.3.0 h1:f93BJ/FdUn4A8Al7+7W4OGy8TMAFhkpqMhw2z/qj2lA=
+github.com/barshociaj/go-cloudant v0.3.0/go.mod h1:AORaoMIUBePPMpbKEpuoABPXuH2f8AUDiSaKteRJBKQ=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23 h1:D21IyuvjDCshj1/qq+pCNd3VZOAEI9jy6Bi131YlXgI=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/buger/jsonparser v0.0.0-20191204142016-1a29609e0929 h1:MW/JDk68Rny52yI0M0N+P8lySNgB+NhpI/uAmhgOhUM=
