@@ -4,7 +4,6 @@ env:
   - COUCH_HOST_URL=http://localhost:5984 COUCH_USER=anna COUCH_PASS=secret
 
 before_install:
-  - sudo /etc/init.d/couchdb stop
   - sudo apt-get update
   - sudo apt-get install --reinstall couchdb
 
