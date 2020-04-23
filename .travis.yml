@@ -3,10 +3,9 @@ language: go
 env:
   - COUCH_HOST_URL=http://localhost:5984 COUCH_USER=anna COUCH_PASS=secret
 
-addons:
-  homebrew:
-    packages:
-      - couchdb
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install couchdb
 
 before_script:
   - curl -X PUT $COUCH_HOST_URL/_config/admins/$COUCH_USER -d '"'$COUCH_PASS'"'
