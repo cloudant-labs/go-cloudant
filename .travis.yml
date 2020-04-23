@@ -1,10 +1,13 @@
 language: go
 
 env:
-  - COUCH_HOST_URL=http://localhost:5984 COUCH_USER=anna COUCH_PASS=secret
+  - COUCH_HOST_URL=http://localhost:5985 COUCH_USER=anna COUCH_PASS=secret
 
 services:
-  - couchdb
+  - docker
+
+before_install:
+  - docker run -d -p 5985:5984 --rm --name couchdb couchdb:1.6
 
 before_script:
   - curl -X PUT $COUCH_HOST_URL/_config/admins/$COUCH_USER -d '"'$COUCH_PASS'"'
