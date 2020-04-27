@@ -1,5 +1,8 @@
 #!/bin/bash
-name=cloudant-developer
+name=couchdb
+export COUCH_USER="mrblobby"
+export COUCH_PASS="blobbypassword"
+export COUCH_HOST_URL="http://127.0.0.1:5984"
 
 #Check docker is running
 docker_state=$(docker info >/dev/null 2>&1)
@@ -12,14 +15,9 @@ fi
 container_exists=$(docker inspect $name)
 if [[ $container_exists == "[]" ]]; then
     echo "Intalling $name ..."
-    # Start cloudant developer docker https://hub.docker.com/r/ibmcom/cloudant-developer/
-    docker run \
-        --detach \
-        --volume cloudant:/srv \
-        --name cloudant-developer \
-        --publish 8080:80 \
-        --hostname cloudant.dev \
-        ibmcom/$name
+    # Start CouchDB docker
+    docker run -d -p 5984:5984 --rm --name couchdb couchdb:1.6
+    curl -X PUT $COUCH_HOST_URL/_config/admins/$COUCH_USER -d '"'$COUCH_PASS'"'
     exit 1
 fi 
 

@@ -6,7 +6,7 @@ import (
 	"net/url"
 )
 
-// DocumentMeta is a CouchDB id/rev pair
+// DocumentMeta is a CouchDB id/rev pair.
 type DocumentMeta struct {
 	ID  string `json:"id"`
 	Rev string `json:"rev"`
@@ -74,7 +74,7 @@ func (d *Database) InsertRaw(jsonDocument []byte) (*DocumentMeta, error) {
 	return resp, err
 }
 
-// UnescapedHTMLJSONMarshal marshals JSON without escaping HTML
+// UnescapedHTMLJSONMarshal marshals JSON without escaping HTML.
 func UnescapedHTMLJSONMarshal(t interface{}) ([]byte, error) {
 	buffer := &bytes.Buffer{}
 	encoder := json.NewEncoder(buffer)

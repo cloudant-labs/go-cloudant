@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Change represents a part returned by _changes
+// Change represents a part returned by _changes.
 type Change struct {
 	ID      string
 	Rev     string
@@ -17,7 +17,7 @@ type Change struct {
 	Doc     map[string]interface{} // Only present if Changes() called with include_docs=true
 }
 
-// ChangeRow represents a part returned by _changes
+// ChangeRow represents a part returned by _changes.
 type ChangeRow struct {
 	ID      string                 `json:"id"`
 	Seq     string                 `json:"seq"` // If using CouchDB1.6, this is a number
@@ -26,7 +26,7 @@ type ChangeRow struct {
 	Doc     map[string]interface{} `json:"doc"`
 }
 
-// Constants defining the possible event types in a changes feed
+// Constants defining the possible event types in a changes feed.
 const (
 	// ChangesInsert is a new document, with _rev starting with "1-"
 	ChangesInsert = iota
@@ -41,7 +41,7 @@ const (
 	ChangesError
 )
 
-// ChangeEvent is the message structure delivered by the Read function
+// ChangeEvent is the message structure delivered by the Read function.
 type ChangeEvent struct {
 	EventType int
 	Meta      *DocumentMeta
@@ -82,7 +82,7 @@ func (c *ChangeRow) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ChangeRowChanges represents a part returned by _changes
+// ChangeRowChanges represents a part returned by _changes.
 type ChangeRowChanges struct {
 	Rev string `json:"rev"`
 }
@@ -170,7 +170,7 @@ func eventType(change *ChangeRow) int {
 	return ChangesUpdate
 }
 
-// NewFollower creates a Follower on database's changes
+// NewFollower creates a Follower on database's changes.
 func (d *Database) NewFollower(interval int) *Follower {
 	follower := &Follower{
 		db:          d,
@@ -181,13 +181,13 @@ func (d *Database) NewFollower(interval int) *Follower {
 	return follower
 }
 
-// Close will terminate the Follower
+// Close will terminate the Follower.
 func (f *Follower) Close() {
 	close(f.stop)
 	<-f.stopped
 }
 
-// Follow starts listening to the changes feed
+// Follow starts listening to the changes feed.
 func (f *Follower) Follow() (<-chan *ChangeEvent, error) {
 	q := NewChangesQuery().
 		IncludeDocs().

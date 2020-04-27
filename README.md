@@ -13,6 +13,10 @@ Features:
 - Hard limit on request concurrency
 - Stream  `/_changes`, `/_all_docs`, and other views
 - Manage `/_bulk_docs` uploads
+- Convenient query helpers
+- Support for views and raw JSON
+- Convenient (optional) `cloudanti` [interface](interface) and mock package
+- Set of [examples](examples) with or without using the interface
 
 ## Installation
 
@@ -23,7 +27,7 @@ go get github.com/barshociaj/go-cloudant
 ## Getting Started
 
 ```go
-// create a Cloudant client with default configuration:
+// Create a Cloudant client with default configuration:
 //   - concurrency:                     5
 //   - maximum retries per request:     3
 //   - random retry delay minimum:      5  seconds

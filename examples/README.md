@@ -5,9 +5,9 @@
 - `api`: API example using go-cloudant library and GIN
 - `api-with-interface`: API example using go-cloudant library and GIN that uses `cloudanti` interface wrapper
 
-## Cloudant (or CouchDB) database
+## Cloudant / CouchDB database
 
-If you do not have access to a Cloudant instance, you can install [Docker](https://www.docker.com/community-edition) and use the [cloudant-developer Docker Container](https://hub.docker.com/r/ibmcom/cloudant-developer/).
+If you do not have access to a Cloudant instance, you can install [Docker](https://www.docker.com/community-edition) and use the [Couch DB Docker Container](https://hub.docker.com/_/couchdb).
 
-Docker set up script is provided for convenience in [cloudant.sh](cloudant.sh)
+Docker set up script is provided for convenience in [couch.sh](couch.sh)
 
