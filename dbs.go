@@ -7,15 +7,14 @@ import (
 	"path"
 )
 
-// Database holds a reference to an authenticated client connection and the
-// name of a remote database
+// Database holds a reference to an authenticated client connection and the name of a remote database.
 type Database struct {
 	client *Client
 	Name   string
 	URL    *url.URL
 }
 
-// Info represents the account meta-data
+// Info represents the account meta-data.
 type Info struct {
 	IsCompactRunning  bool   `json:"compact_running"`
 	DBName            string `json:"db_name"`
@@ -28,14 +27,14 @@ type Info struct {
 	UpdateSeq         string `json:"update_seq"`
 }
 
-// Sizes represents the sizes part of database info
+// Sizes represents the sizes part of database info.
 type Sizes struct {
 	File     int `json:"file"`
 	External int `json:"external"`
 	Active   int `json:"active"`
 }
 
-// List returns a list of all DBs
+// List returns a list of all DBs.
 func (c *Client) List(q *DBsQuery) (*[]string, error) {
 	urlStr, err := Endpoint(*c.rootURL, "/_all_dbs", q.URLValues)
 	if err != nil {

@@ -13,21 +13,19 @@ COUCH_HOST_URL # optional
 
 If the last one isn't set, the host url is assumed to be `https://$COUCH_USER.cloudant.com`.
 
-If you want to run against a local CouchDB in Docker, try:
+If you want to run against a local CouchDB in Docker, try [this set-up script](examples/couch.sh) or:
 
 ```sh
 docker run -d -p 5984:5984 --rm --name couchdb couchdb:1.6
-curl -XPUT 'http://127.0.0.1:5984/_config/admins/mrblobby' -d '"blobbypassword"'
+curl -X PUT 'http://127.0.0.1:5984/_config/admins/mrblobby' -d '"blobbypassword"'
 export COUCH_USER="mrblobby"
 export COUCH_PASS="blobbypassword"
 export COUCH_HOST_URL="http://127.0.0.1:5984"
 go test
 ```
 
-Basic docker set up script is also provided under [examples](examples/cloudant.sh)
-
 Note -- this library does not allow for unauthenticated connections, so you can't
-run against a CouchDB node in `admin party` mode. This is a good thing.
+run against a CouchDB node in `admin party` mode. This is a good thing. This also means you can't use couchdb service in Travis, see [working Travis configuration](.travis.yml).
 
 ## Issues
 

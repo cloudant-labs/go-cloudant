@@ -11,13 +11,13 @@ import (
 
 var bulkUploadBuffer = 1000 // buffer for bulk upload channel
 
-// BulkDocsRequest is the JSON body of a request to the _bulk_docs endpoint
+// BulkDocsRequest is the JSON body of a request to the _bulk_docs endpoint.
 type BulkDocsRequest struct {
 	Docs     []interface{} `json:"docs"`
 	NewEdits bool          `json:"new_edits"`
 }
 
-// BulkDocsResponse is the JSON body of the response from the _bulk_docs endpoint
+// BulkDocsResponse is the JSON body of the response from the _bulk_docs endpoint.
 type BulkDocsResponse struct {
 	Error  string `json:"error,omitempty"`
 	ID     string `json:"id"`
@@ -33,7 +33,7 @@ type BulkJobI interface {
 	Wait()
 }
 
-// BulkJob represents the state of a single document to be uploaded as part of a batch
+// BulkJob represents the state of a single document to be uploaded as part of a batch.
 type BulkJob struct {
 	doc      interface{}
 	Error    error
@@ -44,7 +44,12 @@ type BulkJob struct {
 
 // Bulk returns a new bulk document uploader.
 func (d *Database) Bulk(batchSize int, batchMaxBytes int, flushSecs int) *Uploader {
-	return newUploader(d, batchSize, batchMaxBytes, bulkUploadBuffer, flushSecs)
+	return newUploader(d, batchSize, batchMaxBytes, bulkUploadBuffer, flushSecs, false)
+}
+
+// BulkEscaped returns a new bulk document uploader with escaped HTML
+func (d *Database) BulkEscaped(batchSize int, batchMaxBytes int, flushSecs int) *Uploader {
+	return newUploader(d, batchSize, batchMaxBytes, bulkUploadBuffer, flushSecs, true)
 }
 
 func newBulkJob(doc interface{}, priority bool) *BulkJob {
@@ -93,7 +98,7 @@ func (j *bulkJobStop) isPriority() bool    { return false }
 func (j *bulkJobStop) done()               { j.isDone <- true }
 func (j *bulkJobStop) Wait()               { <-j.isDone }
 
-// Uploader is where Mr Smartypants live
+// Uploader is where Mr Smartypants live.
 type Uploader struct {
 	concurrency   int
 	batchSize     int
@@ -106,7 +111,7 @@ type Uploader struct {
 	workers       []*bulkWorker
 }
 
-func newUploader(database *Database, batchSize, batchMaxBytes, buffer int, flushSecs int) *Uploader {
+func newUploader(database *Database, batchSize, batchMaxBytes, buffer int, flushSecs int, escaped bool) *Uploader {
 	var flushTicker *time.Ticker
 	if flushSecs > 0 {
 		flushTicker = time.NewTicker(time.Duration(flushSecs) * time.Second)
@@ -135,12 +140,12 @@ func newUploader(database *Database, batchSize, batchMaxBytes, buffer int, flush
 		}()
 	}
 
-	uploader.start() // start workers
+	uploader.start(escaped) // start workers
 
 	return &uploader
 }
 
-// BulkUploadSimple does a one-shot synchronous bulk upload
+// BulkUploadSimple does a one-shot synchronous bulk upload.
 func (u *Uploader) BulkUploadSimple(docs []interface{}) ([]BulkDocsResponse, error) {
 	result, err := UploadBulkDocs(&BulkDocsRequest{docs, u.NewEdits}, u.database)
 	defer result.Close()
@@ -184,13 +189,13 @@ func (u *Uploader) AsyncFlush() {
 	u.uploadChan <- job
 }
 
-func (u *Uploader) start() {
+func (u *Uploader) start(escaped bool) {
 	// start workers
 	for i := 0; i < u.concurrency; i++ {
 		worker := newBulkWorker(i+1, u)
 		u.workers = append(u.workers, worker)
 
-		worker.start()
+		worker.start(escaped)
 	}
 
 	// start dispatcher
@@ -226,7 +231,7 @@ func (u *Uploader) start() {
 	}()
 }
 
-// Stop uploads all received documents and then terminates the upload worker(s)
+// Stop uploads all received documents and then terminates the upload worker(s).
 func (u *Uploader) Stop() {
 	if u.flushTicker != nil {
 		u.flushTicker.Stop()
@@ -284,7 +289,7 @@ func (w *bulkWorker) flush() *bulkJobFlush {
 	return job
 }
 
-func (w *bulkWorker) start() {
+func (w *bulkWorker) start(escaped bool) {
 	go func() {
 		liveJobs := make([]*BulkJob, 0, w.uploader.batchSize)
 
@@ -302,7 +307,13 @@ func (w *bulkWorker) start() {
 
 			switch j := job.(type) {
 			case *BulkJob:
-				jsonDocBytes, err := json.Marshal(j.doc)
+				var err error
+				var jsonDocBytes []byte
+				if escaped {
+					jsonDocBytes, err = UnescapedHTMLJSONMarshal(j.doc)
+				} else {
+					jsonDocBytes, err = json.Marshal(j.doc)
+				}
 				if err != nil {
 					j.Error = fmt.Errorf("invalid JSON - %s", err)
 					j.done()
@@ -436,7 +447,7 @@ func processResult(jobs *[]*BulkJob, result *Job, err error, isNewEdits bool) {
 	}
 }
 
-// UploadBulkDocs performs a synchronous _bulk_docs POST
+// UploadBulkDocs performs a synchronous _bulk_docs POST.
 func UploadBulkDocs(bulkDocs *BulkDocsRequest, database *Database) (result *Job, err error) {
 	jsonBulkDocs, err := json.Marshal(bulkDocs)
 	if err != nil {

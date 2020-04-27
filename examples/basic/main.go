@@ -29,17 +29,17 @@ func main() {
 	}
 
 	// Set the Cloudant variables from the environment
-	cloudantURL := os.Getenv("CLOUDANT_URL")
-	cloudantDB := os.Getenv("CLOUDANT_DB")
-	cloudantUser := os.Getenv("CLOUDANT_USER")
-	cloudantPass := os.Getenv("CLOUDANT_PASS")
+	cloudantUser := os.Getenv("COUCH_USER")
+	cloudantPass := os.Getenv("COUCH_PASS")
+	cloudantURL := os.Getenv("COUCH_HOST_URL")
+	cloudantDB := os.Getenv("COUCH_DB")
 
 	// Create a Cloudant Client
 	client, err2 := cloudant.NewClient(cloudantUser, cloudantPass, cloudantURL)
 	if err2 != nil {
-		log.Fatal("Can not connect to Cloudant", err2)
+		log.Fatal("Failed to connect to Cloudant", err2)
 	} else {
-		log.Println("Connected to Cloudant Successfully")
+		log.Println("Connected to Cloudant successfully")
 	}
 
 	// Verify we have an active connection to the server

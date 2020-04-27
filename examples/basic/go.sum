@@ -1,3 +1,5 @@
+github.com/barshociaj/go-cloudant v0.3.1 h1:7osZfja1AZDD9+jfU0t6NiZKsbFh1KSFObgAU21yutw=
+github.com/barshociaj/go-cloudant v0.3.1/go.mod h1:AORaoMIUBePPMpbKEpuoABPXuH2f8AUDiSaKteRJBKQ=
 github.com/buger/jsonparser v0.0.0-20191204142016-1a29609e0929/go.mod h1:tgcrVJ81GPSF0mz+0nu1Xaz0fazGPrmmJfJtxjbHhUQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

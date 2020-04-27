@@ -2,7 +2,7 @@
 
 ### Prequisites:
 * Access to a Cloudant instance. This example has a .env file where you can put your Cloudant instance details.
-If you do not have access to a Cloudant instance, you can install [Docker](https://www.docker.com/community-edition) and use the [cloudant-developer Docker Container](https://hub.docker.com/r/ibmcom/cloudant-developer/).
+If you do not have access to a Cloudant instance, you can install [Docker](https://www.docker.com/community-edition) and use the [Couch DB Docker Container](https://hub.docker.com/_/couchdb).
 * A configured [Go environment](https://golang.org/doc/install).
 
 ### Before running the basic example program (main.go):
@@ -29,11 +29,11 @@ go run main.go
 You should see output similar to the following output:
 
 ```
-2018/01/19 14:25:12 Request (attempt: 0) POST http://localhost:32768/_session
+2018/01/19 14:25:12 Request (attempt: 0) POST http://localhost:5984/_session
 2018/01/19 14:25:12 Connected to Cloudant Successfully
-2018/01/19 14:25:12 Request (attempt: 0) HEAD http://localhost:32768
-2018/01/19 14:25:12 Request (attempt: 0) PUT http://localhost:32768/items
-2018/01/19 14:25:12 Request (attempt: 0) POST http://localhost:32768/items
+2018/01/19 14:25:12 Request (attempt: 0) HEAD http://localhost:5984
+2018/01/19 14:25:12 Request (attempt: 0) PUT http://localhost:5984/items
+2018/01/19 14:25:12 Request (attempt: 0) POST http://localhost:5984/items
 2018/01/19 14:25:12 &{2ee2228864b504d52ad38f445f006596 1-9fdc2238b02e29dd1fda502b7ff07157}
 ```
 
