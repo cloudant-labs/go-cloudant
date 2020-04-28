@@ -39,7 +39,7 @@ func (d *Database) viewRequest(pathStr string, q *ViewQuery) (*Job, error) {
 }
 
 // viewChannel returns a channel for a given view path in which any row interface can be received
-func (d *Database) viewChannel(pathStr string, q *ViewQuery) (<-chan interface{}, error) {
+func (d *Database) viewChannel(pathStr string, q *ViewQuery) (<-chan []byte, error) {
 	job, err := d.viewRequest(pathStr, q)
 	if err != nil {
 		if job != nil {
@@ -54,9 +54,9 @@ func (d *Database) viewChannel(pathStr string, q *ViewQuery) (<-chan interface{}
 		return nil, err
 	}
 
-	results := make(chan interface{}, 1000)
+	results := make(chan []byte, 1000)
 
-	go func(job *Job, results chan<- interface{}) {
+	go func(job *Job, results chan<- []byte) {
 		defer job.Close()
 
 		reader := bufio.NewReader(job.response.Body)
@@ -81,12 +81,12 @@ func (d *Database) viewChannel(pathStr string, q *ViewQuery) (<-chan interface{}
 }
 
 // List returns a channel of all documents in which matching row types can be received.
-func (d *Database) List(q *ViewQuery) (<-chan interface{}, error) {
+func (d *Database) List(q *ViewQuery) (<-chan []byte, error) {
 	return d.viewChannel("/_all_docs", q)
 }
 
 // View returns a channel of view documents in which matching row types can be received.
-func (d *Database) View(designName, viewName string, q *ViewQuery) (<-chan interface{}, error) {
+func (d *Database) View(designName, viewName string, q *ViewQuery) (<-chan []byte, error) {
 	pathStr := "/_design/" + designName + "/_view/" + viewName
 	return d.viewChannel(pathStr, q)
 }

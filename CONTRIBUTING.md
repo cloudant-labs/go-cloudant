@@ -1,6 +1,6 @@
 # Contributing
 
-### Running the Tests
+### Running the tests
 
 To run the tests, you need a Cloudant (or CouchDB) database to talk to. The tests
 expect the following environment variables to be available:

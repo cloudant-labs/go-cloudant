@@ -26,8 +26,8 @@ type Database interface {
 	InsertEscaped(document interface{}) (*cloudant.DocumentMeta, error)
 	InsertRaw(jsonDocument []byte) (*cloudant.DocumentMeta, error)
 	Destroy(string, string) error
-	List(q *cloudant.ViewQuery) (<-chan interface{}, error)
-	View(designName, viewName string, q *cloudant.ViewQuery) (<-chan interface{}, error)
+	List(q *cloudant.ViewQuery) (<-chan []byte, error)
+	View(designName, viewName string, q *cloudant.ViewQuery) (<-chan []byte, error)
 	ViewRaw(string, string, *cloudant.ViewQuery) ([]byte, error)
 }
 
@@ -112,12 +112,12 @@ func (d *databaseImpl) Destroy(documentID, rev string) error {
 }
 
 // List returns a channel of all documents in which matching row types can be received.
-func (d *databaseImpl) List(q *cloudant.ViewQuery) (<-chan interface{}, error) {
+func (d *databaseImpl) List(q *cloudant.ViewQuery) (<-chan []byte, error) {
 	return d.database.List(q)
 }
 
 // View returns a channel of view documents in which matching row types can be received.
-func (d *databaseImpl) View(designName, viewName string, q *cloudant.ViewQuery) (<-chan interface{}, error) {
+func (d *databaseImpl) View(designName, viewName string, q *cloudant.ViewQuery) (<-chan []byte, error) {
 	return d.database.View(designName, viewName, q)
 }
 
