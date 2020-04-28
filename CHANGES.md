@@ -17,3 +17,7 @@
 # 0.3.2 (2020-04-28)
 
 - Return view row output as []byte, extend cloudanti interface
+
+# 0.3.3 (2020-04-28)
+
+- Fix scope issue for workers with different client URLs
