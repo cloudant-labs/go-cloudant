@@ -24,6 +24,31 @@ Features:
 go get github.com/barshociaj/go-cloudant
 ```
 
+## Table of contents
+
+- [Getting started](#getting-started)
+- [Database functions](#database-functions)
+  - [client.Destroy(dbName)](#clientdestroydbname)
+  - [client.Exists(dbName)](#clientexistsdbname)
+  - [client.Info(dbName)](#clientinfodbname)
+  - [client.List(dbsQuery)](#clientlistdbsquery)
+  - [client.Use(dbName)`](#clientusedbname)
+  - [client.UseOrCreate(dbName)](#clientuseorcreatedbname)
+  - [db.Changes(changesQuery)](#dbchangeschangesquery)
+  - [db.NewFollower(seq)](#dbnewfollowerseq)
+- [Document functions](#document-functions)
+  - [db.Destroy(docID, rev)](#dbdestroydocid-rev)
+  - [db.Get(docID, docQuery, doc)](#dbgetdocid-docquery-doc)
+  - [db.Insert(doc)](#dbinsertdoc)
+  - [db.InsertEscaped(doc)](#dbinsertescapeddoc)
+  - [db.InsertRaw(json)`](#dbinsertrawjson)
+  - [db.Bulk(batchSize, batchMaxBytes, flushSecs)](#dbbulkbatchsize-batchmaxbytes-flushsecs)
+- [Views](#views)
+  - [db.List(viewQuery)](#dblistviewquery)
+  - [db.View(designName, viewName, viewQuery)](#dbviewdesignname-viewname-viewquery)
+  - [db.ViewRaw(designName, viewName, viewQuery)`](#dbviewrawdesignname-viewname-viewquery)
+- [Tests](#tests)
+
 ## Getting Started
 
 ```go
@@ -61,7 +86,6 @@ Retrieve database info
 ```go
 info, err := client.Info("my_db")
 fmt.Println(info.DocCount) // prints the number of documents in the database
-
 ```
 
 ### `client.List(dbsQuery)`
@@ -180,7 +204,7 @@ fmt.Println(doc.Foo)  // prints 'foo' key
 
 ### `db.Insert(doc)`
 
-Inserts `myDoc` in the database
+Inserts `doc` in the database
 
 ```go
 myDoc := &Doc{
@@ -210,8 +234,8 @@ json := []byte(`{
 		"_id": "_design/test_design_doc",
 		"language": "javascript",
 		"views": {
-			"start_with_one": {
-				"map": "function (doc) { if (doc._id.indexOf('-01') > 0) emit(doc._id, doc.foo) }"
+			"cities": {
+				"map": "function (doc) { if (doc._id.indexOf('city_') == 0) emit(doc._id, doc.foo) }"
 			}
 		}
 	  }`)
@@ -270,13 +294,21 @@ if r3.Error != nil {
 }
 ```
 
-## Views functions 
+## Views 
 
 ### `db.List(viewQuery)`
 
-List all the docs in the database (`_all_docs` view)
+List all docs in the database (`_all_docs` view) and returns each row as []byte. See [db.View](#dbviewdesignname-viewname-viewquery-view) example if you'd like to read the document body.
 
 ```go
+type MyRow struct {
+	ID    string     `json:"id"`
+	Value MyRowValue `json:"value"`
+}
+type MyRowValue struct {
+	Rev string `json:"rev"`
+}
+
 rows, err := db.List(cloudant.NewViewQuery())
 
 // OR include some query options...
@@ -291,16 +323,20 @@ rows, err := db.List(cloudant.NewViewQuery())
 for {
     row, more := <-rows
     if more {
-        fmt.Println(row.ID, row.Value.Rev)  // prints document 'id' and 'rev'
+        r := new(MyRow)
+        err = json.Unmarshal(row, r)
+        if err == nil {
+            fmt.Println(r.ID, r.Value.Rev)  // prints document 'id' and 'rev'
+        }
     } else {
         break
     }
 }
 ```
 
-### `db.View(designName, viewName, viewQuery, view)`
+### `db.View(designName, viewName, viewQuery)`
 
-Calls a view of the specified designName and decodes the result using provided interface
+Calls the viewName of the specified designName and returns each row as []byte.
 
 ```go
 type MyRow struct {
@@ -315,21 +351,19 @@ type MyDoc struct {
 	Foo string `json:"foo" binding:"required"`
 }
 
-
-myView := new(DocsView)
 q := cloudant.NewViewQuery().
     Descending().
     Key("foo1").
     Limit(1).
     IncludeDocs()
 
-rows, err := db.View("my_design_name", "my_view_name", q, myView)
+rows, err := db.View("my_design_name", "my_view_name", q)
 
 for {
     row, more := <-rows
     if more {
         r := new(MyRow)
-        err = json.Unmarshal(row.([]byte), r)
+        err = json.Unmarshal(row, r)
         if err == nil {
             fmt.Println(r.Doc.ID, r.Doc.Rev, r.Doc.Foo)  // prints document 'id', 'rev', and 'foo' value
         }
@@ -341,7 +375,7 @@ for {
 
 ### `db.ViewRaw(designName, viewName, viewQuery)`
 
-Calls a view of the specified designName and returns raw []byte response. This allows querying views with arbitrary output such as when using reduce.
+Calls the viewName of the specified designName and returns raw []byte response. This allows querying views with arbitrary output such as when using reduce.
 
 ```go
 import "github.com/buger/jsonparser"
@@ -352,3 +386,7 @@ if err != nil {
     value, decodeErr := jsonparser.Get(response, "total_rows")
 }
 ```
+
+## Tests
+
+Refer to the guidance in [CONTRIBUTING](CONTRIBUTING).

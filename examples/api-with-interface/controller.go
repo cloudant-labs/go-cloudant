@@ -30,7 +30,7 @@ func (api *API) Get(c *gin.Context) {
 	}
 
 	doc := Doc{}
-	// Get doc from Cloudant view
+	// Get doc from Cloudant
 	err := db.Get(id, cloudant.NewDocQuery(), &doc)
 
 	if err != nil && err.Error() == CLOUDANT404ERROR {

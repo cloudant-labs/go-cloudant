@@ -118,7 +118,7 @@ func TestBulk_NewEditsFalse(t *testing.T) {
 		row, more := <-rows
 		if more {
 			r := new(AllRow)
-			err = json.Unmarshal(row.([]byte), r)
+			err = json.Unmarshal(row, r)
 			if err == nil {
 				if rev, ok := myRevs[r.ID]; ok && rev == r.Value.Rev {
 					foundRevs[r.ID] = r.Value.Rev

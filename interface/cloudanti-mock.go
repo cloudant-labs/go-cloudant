@@ -179,8 +179,8 @@ func (d *mockDatabaseImpl) Destroy(docID, rev string) error {
 }
 
 // List returns a channel of all documents view rows.
-func (d *mockDatabaseImpl) List(q *cloudant.ViewQuery) (<-chan interface{}, error) {
-	results := make(chan interface{}, 1000)
+func (d *mockDatabaseImpl) List(q *cloudant.ViewQuery) (<-chan []byte, error) {
+	results := make(chan []byte, 1000)
 	for id, doc := range d.client.databases[d.databaseName].Docs {
 		results <- []byte(`{"id":"` + id + `","key":"~mock~","value":"~mock~","doc":` + string(doc) + `}`)
 	}
@@ -189,13 +189,13 @@ func (d *mockDatabaseImpl) List(q *cloudant.ViewQuery) (<-chan interface{}, erro
 }
 
 // View returns a channel of view documents rows.
-func (d *mockDatabaseImpl) View(designName, viewName string, q *cloudant.ViewQuery) (<-chan interface{}, error) {
+func (d *mockDatabaseImpl) View(designName, viewName string, q *cloudant.ViewQuery) (<-chan []byte, error) {
 	urlStr, _ := cloudant.Endpoint(url.URL{}, "/_design/"+designName+"/_view/"+viewName, q.URLValues)
 
 	// if mock view was supplied, get the list of IDs to include
 	view, viewExists := d.client.databases[d.databaseName].Views[urlStr]
 
-	results := make(chan interface{}, 1000)
+	results := make(chan []byte, 1000)
 	for id, doc := range d.client.databases[d.databaseName].Docs {
 		// if view does not exist, build a view out of all documents, otherwise include IDs specified in the mock view only
 		if !viewExists || Contains(view, id) {
