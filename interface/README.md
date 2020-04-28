@@ -4,7 +4,7 @@
 
 The package can be used directly (see [basic](../examples/basic-with-interface) or [api](../examples/api-with-interface) examples) or copied and customized as required. 
 
-## Getting Started
+## Getting started
 
 Use `cloudanti` instead of `cloudant` to set up the client.
 

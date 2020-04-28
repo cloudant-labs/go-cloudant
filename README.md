@@ -49,7 +49,7 @@ go get github.com/barshociaj/go-cloudant
   - [db.ViewRaw(designName, viewName, viewQuery)`](#dbviewrawdesignname-viewname-viewquery)
 - [Tests](#tests)
 
-## Getting Started
+## Getting started
 
 ```go
 // Create a Cloudant client with default configuration:
@@ -389,4 +389,4 @@ if err != nil {
 
 ## Tests
 
-Refer to the guidance in [CONTRIBUTING](CONTRIBUTING).
+Refer to the guidance in [CONTRIBUTING](CONTRIBUTING.md).
