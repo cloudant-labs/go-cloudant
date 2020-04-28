@@ -103,77 +103,75 @@ func newWorker(id int, client *Client) worker {
 	return worker
 }
 
-var workerFunc func(worker *worker, job *Job) // func executed by workers
-
 // Generates a random int within the range [min, max]
 func random(min, max int) int { return rand.Intn(max-min) + min }
 
-func (w *worker) start() {
-	if workerFunc == nil {
-		workerFunc = func(worker *worker, job *Job) {
-			LogFunc("Request (attempt: %d) %s %s", job.retryCount, job.request.Method,
-				job.request.URL.String())
+// Runs worker job.
+func (w *worker) runJob(job *Job) {
+	LogFunc("Request (attempt: %d) %s %s", job.retryCount, job.request.Method,
+		job.request.URL.String())
 
-			// save body for retries
-			if job.retryCount == 0 && job.request.Body != nil {
-				var err error
-				job.bodyBytes, err = ioutil.ReadAll(job.request.Body)
-				if err != nil {
-					LogFunc("failed to read request body, %s", err)
-				}
-			}
-
-			job.request.Body = ioutil.NopCloser(bytes.NewReader(job.bodyBytes))
-
-			// add go-cloudant UA
-			job.request.Header.Add("User-Agent", "go-cloudant/"+worker.client.version+"/"+runtime.Version())
-
-			resp, err := worker.client.httpClient.Do(job.request)
-
-			retry := false
-			if err != nil {
-				LogFunc("failed to submit request, %s", err)
-				retry = true
-			} else {
-				switch resp.StatusCode {
-				case 401, 403:
-					// Retry login after 403 too to handle temporary firewall errors in addition to credentials_expired
-					if !job.isLogin {
-						LogFunc("renewing session after %v", resp.StatusCode)
-						w.client.LogIn()
-						retry = true
-					}
-				case 429, 500, 501, 502, 503, 504:
-					retry = true
-				}
-			}
-
-			if retry {
-				if job.retryCount < w.client.retryCountMax {
-					job.retryCount++
-
-					go func(startDelay int) {
-						time.Sleep(time.Duration(startDelay) * time.Second)
-						w.client.Execute(job)
-					}(random(w.client.retryDelayMin, w.client.retryDelayMax))
-
-					return
-				}
-				LogFunc("%s %s failed, too many retries",
-					job.request.Method, job.request.URL.String())
-
-			}
-			job.response = resp
-			job.error = err
-			job.done()
+	// save body for retries
+	if job.retryCount == 0 && job.request.Body != nil {
+		var err error
+		job.bodyBytes, err = ioutil.ReadAll(job.request.Body)
+		if err != nil {
+			LogFunc("failed to read request body, %s", err)
 		}
 	}
+
+	job.request.Body = ioutil.NopCloser(bytes.NewReader(job.bodyBytes))
+
+	// add go-cloudant UA
+	job.request.Header.Add("User-Agent", "go-cloudant/"+w.client.version+"/"+runtime.Version())
+
+	resp, err := w.client.httpClient.Do(job.request)
+
+	retry := false
+	if err != nil {
+		LogFunc("failed to submit request, %s", err)
+		retry = true
+	} else {
+		switch resp.StatusCode {
+		case 401, 403:
+			// Retry login after 403 too to handle temporary firewall errors in addition to credentials_expired
+			if !job.isLogin {
+				LogFunc("renewing session after %v", resp.StatusCode)
+				w.client.LogIn()
+				retry = true
+			}
+		case 429, 500, 501, 502, 503, 504:
+			retry = true
+		}
+	}
+
+	if retry {
+		if job.retryCount < w.client.retryCountMax {
+			job.retryCount++
+
+			go func(startDelay int) {
+				time.Sleep(time.Duration(startDelay) * time.Second)
+				w.client.Execute(job)
+			}(random(w.client.retryDelayMin, w.client.retryDelayMax))
+
+			return
+		}
+		LogFunc("%s %s failed, too many retries",
+			job.request.Method, job.request.URL.String())
+
+	}
+	job.response = resp
+	job.error = err
+	job.done()
+}
+
+func (w *worker) start() {
 	go func() {
 		for {
 			w.client.workerChan <- w.jobsChan
 			select {
 			case job := <-w.jobsChan:
-				workerFunc(w, job)
+				w.runJob(job)
 			case <-w.quitChan:
 				return
 			}
