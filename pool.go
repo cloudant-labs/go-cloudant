@@ -134,7 +134,7 @@ func (w *worker) runJob(job *Job) {
 	} else {
 		switch resp.StatusCode {
 		case 401, 403:
-			// Retry login after 403 too to handle temporary firewall errors in addition to credentials_expired
+			// Retry login after any 403, not just credentials_expired
 			if !job.isLogin {
 				LogFunc("renewing session after %v", resp.StatusCode)
 				w.client.LogIn()
