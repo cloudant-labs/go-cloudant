@@ -1,4 +1,4 @@
-module github.com/barshociaj/go-cloudant
+module github.com/cloudant-labs/go-cloudant
 
 go 1.13
 

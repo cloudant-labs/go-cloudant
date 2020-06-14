@@ -3,7 +3,7 @@ package cloudanti
 import (
 	"testing"
 
-	"github.com/barshociaj/go-cloudant"
+	"github.com/cloudant-labs/go-cloudant"
 )
 
 func TestCloudantInterfaceMock(t *testing.T) {

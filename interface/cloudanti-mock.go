@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/barshociaj/go-cloudant"
+	"github.com/cloudant-labs/go-cloudant"
 	"github.com/buger/jsonparser"
 )
 

@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/barshociaj/go-cloudant"
+	"github.com/cloudant-labs/go-cloudant"
 	"github.com/joho/godotenv"
 )
 

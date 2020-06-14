@@ -4,7 +4,7 @@ A [Cloudant](https://cloudant.com/) library for Golang.
 
 Forked from cloudant-labs and modified to align closer to NodeJS `nano` library. __This library is not complete, may change in incompatible ways in future versions, and comes with no support.__
 
-[![Build Status](https://travis-ci.org/barshociaj/go-cloudant.svg?branch=master)](https://travis-ci.org/barshociaj/go-cloudant)
+[![Build Status](https://travis-ci.org/cloudant-labs/go-cloudant.svg?branch=master)](https://travis-ci.org/cloudant-labs/go-cloudant)
 
 Features:
 - Session authentication
@@ -21,7 +21,7 @@ Features:
 ## Installation
 
 ```bash
-go get github.com/barshociaj/go-cloudant
+go get github.com/cloudant-labs/go-cloudant
 ```
 
 ## Table of contents

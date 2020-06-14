@@ -7,7 +7,7 @@
 package cloudanti
 
 import (
-	"github.com/barshociaj/go-cloudant"
+	"github.com/cloudant-labs/go-cloudant"
 )
 
 // Client is the main interface for Cloudant instance operations

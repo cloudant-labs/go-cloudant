@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/barshociaj/go-cloudant"
+	"github.com/cloudant-labs/go-cloudant"
 )
 
 func TestCloudantInterface(t *testing.T) {

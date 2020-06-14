@@ -13,7 +13,7 @@ Refer to the [full example](../examples/basic-with-interface) for a working impl
 ### main.go
 
 ```go
-import "github.com/barshociaj/go-cloudant/interface"
+import "github.com/cloudant-labs/go-cloudant/interface"
 
 // Create Cloudant Client
 client, err := cloudanti.NewClient("user123", "pa55w0rd01", "https://user123.cloudant.com")
