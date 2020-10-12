@@ -1,3 +1,7 @@
+# This repository is now archived.
+# A Go SDK for IBM Cloudant is available at https://github.com/ibm/cloudant-go-sdk
+
+
 # go-cloudant
 
 A Cloudant library for Golang.
